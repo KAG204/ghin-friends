@@ -1,5 +1,22 @@
 {
-  "updatedAt": "2026-05-14T14:52:54.550Z",
+  "updatedAt": "2026-05-14T15:24:50.921Z",
   "schemaVersion": 1,
-  "golfers": {}
+  "golfers": {
+    "1*****1": {
+      "name": "Adam Winston",
+      "club": "Brentwood Country Club",
+      "rows": [
+        {
+          "d": "2025-08-28",
+          "i": 12.7
+        },
+        {
+          "d": "2026-05-14",
+          "i": 13.8
+        }
+      ],
+      "lastReportedLow12mo": 12.7,
+      "lastReportedLowDate": "2025-08-28"
+    }
+  }
 }
