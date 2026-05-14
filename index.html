@@ -213,19 +213,19 @@
     <!-- Add friend view -->
     <div id="addView" class="hidden">
       <h2>Add a friend</h2>
-      <p class="muted">Find the GHIN number in your GHIN mobile app under "Find Golfer".</p>
+      <p class="muted">Type their name, state, and country club. The daily snapshot looks them up in GHIN automatically.</p>
       <form id="addForm">
         <div class="field">
-          <label for="fGhin">GHIN number</label>
-          <input id="fGhin" name="ghin" inputmode="numeric" autocomplete="off" required>
+          <label for="fName">Full name</label>
+          <input id="fName" name="name" autocapitalize="words" autocomplete="off" placeholder="Jane Smith" required>
         </div>
         <div class="field">
-          <label for="fName">Display name</label>
-          <input id="fName" name="name" autocapitalize="words" autocomplete="off" required>
+          <label for="fState">State (2-letter)</label>
+          <input id="fState" name="state" autocapitalize="characters" autocomplete="off" maxlength="2" placeholder="NC" required>
         </div>
         <div class="field">
-          <label for="fClub">Home club (optional)</label>
-          <input id="fClub" name="club" autocapitalize="words" autocomplete="off">
+          <label for="fClub">Country club / home club</label>
+          <input id="fClub" name="club" autocapitalize="words" autocomplete="off" placeholder="Governors Club" required>
         </div>
         <div id="addMsg" class="muted"></div>
         <div class="modal-actions">
@@ -260,11 +260,12 @@
   // =========================================================================
   // CONFIG
   // =========================================================================
-  const GITHUB_REPO  = 'KAG204/ghin-friends';
-  const WORKFLOW_ID  = 'snapshot.yml';
-  const TOKEN_KEY    = 'ghinFriendsPAT';
-  const CACHE_KEY    = 'ghinDataCache';
-  const MONTHS       = 12;
+  const GITHUB_REPO    = 'KAG204/ghin-friends';
+  const WORKFLOW_ID    = 'snapshot.yml';
+  const TOKEN_KEY      = 'ghinFriendsPAT';
+  const DATA_CACHE     = 'ghinDataCache';
+  const FRIENDS_CACHE  = 'ghinFriendsCache';
+  const MONTHS         = 12;
   const PALETTE = [
     '#1a4d2e', '#b91c1c', '#1d4ed8', '#a855f7',
     '#ea580c', '#0891b2', '#ca8a04', '#db2777',
@@ -296,8 +297,8 @@
   // add
   const $addView    = $('addView');
   const $addForm    = $('addForm');
-  const $fGhin      = $('fGhin');
   const $fName      = $('fName');
+  const $fState     = $('fState');
   const $fClub      = $('fClub');
   const $addSave    = $('addSave');
   const $addAndRun  = $('addAndRun');
@@ -313,10 +314,11 @@
   // =========================================================================
   // State
   // =========================================================================
-  let data = { golfers: {}, updatedAt: null };
+  let friends = [];   // mirror of friends.json (canonical list of who to show)
+  let data = { golfers: {}, updatedAt: null };  // mirror of data.json (history)
   let chart;
   let editMode = false;
-  let pendingRemoveGhin = null;
+  let pendingRemove = null; // friend object pending removal
 
   // =========================================================================
   // PAT helpers
@@ -384,21 +386,32 @@
     });
   }
 
-  async function apiAddFriend({ ghin, name, club }) {
-    const { sha, json } = await ghGetFile('friends.json');
-    if (json.find(f => String(f.ghin) === String(ghin))) {
-      throw new Error('Already tracking this GHIN.');
-    }
-    json.push({ ghin: String(ghin), name, club: club || '' });
-    await ghPutFile('friends.json', json, sha, `Add ${name} (GHIN ${ghin})`);
+  function friendMatches(a, b) {
+    // Two friend entries refer to the same person if their GHIN matches,
+    // or (when GHIN isn't known yet) their name + state + club tuple matches.
+    if (a?.ghin && b?.ghin) return String(a.ghin) === String(b.ghin);
+    return (a?.name || '').toLowerCase() === (b?.name || '').toLowerCase()
+        && (a?.state || '').toUpperCase() === (b?.state || '').toUpperCase()
+        && (a?.club || '').toLowerCase() === (b?.club || '').toLowerCase();
   }
 
-  async function apiRemoveFriend(ghin) {
+  async function apiAddFriend({ name, state, club }) {
     const { sha, json } = await ghGetFile('friends.json');
-    const idx = json.findIndex(f => String(f.ghin) === String(ghin));
-    if (idx < 0) throw new Error('Not in friends.json (already removed?).');
+    const candidate = { name, state: (state || '').toUpperCase(), club: club || '' };
+    if (json.find(f => friendMatches(f, candidate))) {
+      throw new Error('Already tracking someone with this name + state + club.');
+    }
+    json.push(candidate);
+    await ghPutFile('friends.json', json, sha, `Add ${name}`);
+    return candidate;
+  }
+
+  async function apiRemoveFriend(friend) {
+    const { sha, json } = await ghGetFile('friends.json');
+    const idx = json.findIndex(f => friendMatches(f, friend));
+    if (idx < 0) throw new Error('Not found in friends.json (already removed?).');
     const removed = json.splice(idx, 1)[0];
-    await ghPutFile('friends.json', json, sha, `Remove ${removed.name || 'friend'} (GHIN ${ghin})`);
+    await ghPutFile('friends.json', json, sha, `Remove ${removed.name || 'friend'}`);
   }
 
   // =========================================================================
@@ -417,26 +430,30 @@
   }
 
   // =========================================================================
-  // Data load
+  // Data load — fetch friends.json + data.json in parallel, cache both
   // =========================================================================
-  async function loadData() {
+  async function fetchOrCache(path, cacheKey, fallback) {
     try {
-      const res = await fetch('./data.json?t=' + Date.now(), { cache: 'no-store' });
+      const res = await fetch(`./${path}?t=` + Date.now(), { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const fresh = await res.json();
-      localStorage.setItem(CACHE_KEY, JSON.stringify(fresh));
-      return { source: 'network', data: fresh };
-    } catch (err) {
-      const raw = localStorage.getItem(CACHE_KEY);
-      if (raw) return { source: 'cache', data: JSON.parse(raw) };
-      throw err;
+      localStorage.setItem(cacheKey, JSON.stringify(fresh));
+      return { source: 'network', value: fresh };
+    } catch {
+      const raw = localStorage.getItem(cacheKey);
+      if (raw) { try { return { source: 'cache', value: JSON.parse(raw) }; } catch {} }
+      return { source: 'missing', value: fallback };
     }
   }
 
   async function refreshData() {
-    const result = await loadData();
-    data = result.data || { golfers: {}, updatedAt: null };
-    renderHeader(result.source);
+    const [fr, dt] = await Promise.all([
+      fetchOrCache('friends.json', FRIENDS_CACHE, []),
+      fetchOrCache('data.json',    DATA_CACHE,    { golfers: {}, updatedAt: null }),
+    ]);
+    friends = Array.isArray(fr.value) ? fr.value : [];
+    data    = dt.value || { golfers: {}, updatedAt: null };
+    renderHeader(dt.source);
     renderFriends();
     renderChart();
   }
@@ -461,11 +478,10 @@
   }
 
   function renderFriends() {
-    const ghins = Object.keys(data.golfers || {});
     $friendsList.innerHTML = '';
-    $editToggle.classList.toggle('hidden', ghins.length === 0);
+    $editToggle.classList.toggle('hidden', friends.length === 0);
 
-    if (ghins.length === 0) {
+    if (friends.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty';
       empty.innerHTML = `No friends yet. Tap <strong>+ Add</strong> to add one.`;
@@ -473,40 +489,44 @@
       return;
     }
 
-    ghins.forEach((ghin, idx) => {
-      const g = data.golfers[ghin];
-      const d = trailingDelta(g.rows);
+    friends.forEach((f, idx) => {
+      const g = (f.ghin && data.golfers) ? data.golfers[String(f.ghin)] : null;
+      const rows = g?.rows || [];
+      const dlt = trailingDelta(rows);
       const card = document.createElement('div');
       card.className = 'friend';
 
       const sw = document.createElement('span');
       sw.className = 'swatch';
-      sw.style.background = colorFor(ghin, idx);
+      sw.style.background = colorFor(f, idx);
 
       const info = document.createElement('div');
       info.className = 'info';
       const name = document.createElement('div');
       name.className = 'name';
-      name.textContent = g.name || `GHIN ${ghin}`;
+      name.textContent = g?.name || f.name || '(no name)';
       const club = document.createElement('div');
       club.className = 'club';
-      club.textContent = g.club || '';
+      club.textContent = [g?.club || f.club, f.state].filter(Boolean).join(' · ');
       info.append(name, club);
 
       const num = document.createElement('div');
       num.className = 'num';
       const idxEl = document.createElement('div');
       idxEl.className = 'index';
-      idxEl.textContent = d ? d.latest.toFixed(1) : (g.rows?.length ? g.rows[g.rows.length-1].i.toFixed(1) : '—');
+      idxEl.textContent = rows.length ? rows[rows.length-1].i.toFixed(1) : '—';
       const deltaEl = document.createElement('div');
-      if (!d) {
+      if (!f.ghin && !rows.length) {
         deltaEl.className = 'delta flat';
-        deltaEl.textContent = (g.rows?.length === 1) ? '1 snapshot' : 'no data';
+        deltaEl.textContent = 'pending';
+      } else if (!dlt) {
+        deltaEl.className = 'delta flat';
+        deltaEl.textContent = (rows.length === 1) ? '1 snapshot' : 'no data';
       } else {
-        const sign  = d.delta < 0 ? '−' : d.delta > 0 ? '+' : '±';
-        const abs   = Math.abs(d.delta).toFixed(1);
-        const label = d.windowed ? '12mo' : `${d.days}d`;
-        deltaEl.className = 'delta ' + (d.delta < 0 ? 'improve' : d.delta > 0 ? 'decline' : 'flat');
+        const sign  = dlt.delta < 0 ? '−' : dlt.delta > 0 ? '+' : '±';
+        const abs   = Math.abs(dlt.delta).toFixed(1);
+        const label = dlt.windowed ? '12mo' : `${dlt.days}d`;
+        deltaEl.className = 'delta ' + (dlt.delta < 0 ? 'improve' : dlt.delta > 0 ? 'decline' : 'flat');
         deltaEl.textContent = `${sign}${abs} ${label}`;
       }
       num.append(idxEl, deltaEl);
@@ -517,8 +537,8 @@
         const x = document.createElement('button');
         x.className = 'x';
         x.textContent = '×';
-        x.title = `Remove ${g.name || ghin}`;
-        x.addEventListener('click', () => openRemove(ghin));
+        x.title = `Remove ${f.name}`;
+        x.addEventListener('click', () => openRemove(f));
         card.append(x);
       }
 
@@ -527,19 +547,18 @@
   }
 
   function renderChart() {
-    const ghins = Object.keys(data.golfers || {});
     const startStr = toLocalDateStr(windowStart());
 
-    const datasets = ghins.map((ghin, idx) => {
-      const g = data.golfers[ghin];
-      const rows = (g.rows || [])
+    const datasets = friends.map((f, idx) => {
+      const g = (f.ghin && data.golfers) ? data.golfers[String(f.ghin)] : null;
+      const rows = (g?.rows || [])
         .filter(r => r.d >= startStr)
         .map(r => ({ x: new Date(r.d + 'T12:00:00'), y: r.i }));
       return {
-        label: g.name || `GHIN ${ghin}`,
+        label: g?.name || f.name,
         data: rows,
-        borderColor: colorFor(ghin, idx),
-        backgroundColor: colorFor(ghin, idx),
+        borderColor: colorFor(f, idx),
+        backgroundColor: colorFor(f, idx),
         spanGaps: true,
       };
     }).filter(ds => ds.data.length > 0);
@@ -609,14 +628,18 @@
 
   function openAddOrSetup() {
     if (!getPat()) { $patInput.value = ''; openModal('setup'); }
-    else { $fGhin.value=''; $fName.value=''; $fClub.value=''; $addMsg.textContent=''; openModal('add'); setTimeout(()=>$fGhin.focus(), 50); }
+    else {
+      $fName.value=''; $fState.value=''; $fClub.value=''; $addMsg.textContent='';
+      openModal('add');
+      setTimeout(()=>$fName.focus(), 50);
+    }
   }
 
-  function openRemove(ghin) {
+  function openRemove(friend) {
     if (!getPat()) { openModal('setup'); return; }
-    pendingRemoveGhin = ghin;
-    const g = data.golfers[ghin];
-    $removeText.innerHTML = `Remove <strong>${g?.name || 'GHIN '+ghin}</strong> from your tracker? Their past data stays in <code>data.json</code> so re-adding restores the chart.`;
+    pendingRemove = friend;
+    const display = friend.name || `(GHIN ${friend.ghin})`;
+    $removeText.innerHTML = `Remove <strong>${display}</strong> from your tracker? Their past data stays in <code>data.json</code> so re-adding restores the chart.`;
     $removeMsg.textContent = '';
     openModal('remove');
   }
@@ -658,14 +681,24 @@
   });
 
   async function submitAdd(triggerAfter) {
-    const ghin = $fGhin.value.trim();
-    const name = $fName.value.trim();
-    const club = $fClub.value.trim();
-    if (!ghin || !name) { $addMsg.textContent = 'GHIN number and name are required.'; return; }
+    const name  = $fName.value.trim();
+    const state = $fState.value.trim().toUpperCase();
+    const club  = $fClub.value.trim();
+    if (!name || !state || !club) {
+      $addMsg.textContent = 'Name, state, and club are all required for accurate matching.';
+      return;
+    }
+    if (!/^[A-Z]{2}$/.test(state)) {
+      $addMsg.textContent = 'State should be a 2-letter abbreviation (e.g. NC).';
+      return;
+    }
     $addSave.disabled = true; $addAndRun.disabled = true;
     $addMsg.innerHTML = '<span class="spinner"></span> Saving…';
     try {
-      await apiAddFriend({ ghin, name, club });
+      const added = await apiAddFriend({ name, state, club });
+      // Optimistic local update
+      friends.push(added);
+      renderFriends(); renderChart();
       if (triggerAfter) {
         $addMsg.innerHTML = '<span class="spinner"></span> Triggering snapshot…';
         await ghTriggerWorkflow();
@@ -673,7 +706,7 @@
       closeModalFn();
       showBanner('ok',
         triggerAfter
-          ? `Added ${name}. Snapshot running — check back in ~30 sec.`
+          ? `Added ${name}. Snapshot running — refresh in ~30 sec.`
           : `Added ${name}. Will appear on next daily run.`,
         5000);
     } catch (err) {
@@ -687,22 +720,21 @@
   $addAndRun.addEventListener('click', () => submitAdd(true));
 
   $removeConfirm.addEventListener('click', async () => {
-    if (!pendingRemoveGhin) return;
+    if (!pendingRemove) return;
     $removeConfirm.disabled = true; $removeCancel.disabled = true;
     $removeMsg.innerHTML = '<span class="spinner"></span> Removing…';
     try {
-      const ghin = pendingRemoveGhin;
-      const g = data.golfers[ghin];
-      await apiRemoveFriend(ghin);
-      delete data.golfers[ghin];
+      const friend = pendingRemove;
+      await apiRemoveFriend(friend);
+      friends = friends.filter(f => !friendMatches(f, friend));
       renderFriends(); renderChart();
       closeModalFn();
-      showBanner('ok', `Removed ${g?.name || 'friend'}.`, 3000);
+      showBanner('ok', `Removed ${friend.name || 'friend'}.`, 3000);
     } catch (err) {
       $removeMsg.textContent = `Failed: ${err.message}`;
     } finally {
       $removeConfirm.disabled = false; $removeCancel.disabled = false;
-      pendingRemoveGhin = null;
+      pendingRemove = null;
     }
   });
 

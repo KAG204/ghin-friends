@@ -1,29 +1,12 @@
 // Daily snapshot fetcher — runs on GitHub Actions (Node 20+).
 //
-// GHIN's lookup requires a logged-in user. This script:
-//   1. Gets a Firebase installation token (anonymous, public Google API).
-//   2. Logs in to GHIN with the user's email + password to get a JWT.
-//   3. For each friend in friends.json, fetches the golfer record by GHIN#.
-//   4. Appends today's handicap index to data.json.
+// Looks up each friend in friends.json by name + state + club (no GHIN# needed),
+// fetches their current handicap index, appends today's row to data.json.
 //
-// Auth flow reverse-engineered from the unofficial n8io/ghin npm wrapper
-// (https://github.com/n8io/ghin), which mirrors what the GHIN mobile app does.
+// Once a friend is resolved, the GHIN# is written back into friends.json so
+// future runs skip the search step (faster + more reliable).
 //
-// =============================================================================
-// CREDENTIALS
-// =============================================================================
-// Set these as GitHub Actions secrets — NEVER paste them into this file:
-//
-//   GHIN_USER     your GHIN account email OR your GHIN number
-//   GHIN_PASSWORD your GHIN account password
-//
-// To set them: on github.com, go to repo → Settings → Secrets and variables
-// → Actions → New repository secret. Add both. The workflow YAML pipes them
-// into this script as environment variables.
-//
-// For local testing, set them in your shell before running:
-//   PowerShell:  $env:GHIN_USER='you@example.com'; $env:GHIN_PASSWORD='...'
-//   bash:        GHIN_USER=you@example.com GHIN_PASSWORD=... node scripts/snapshot.mjs
+// Auth: see README. Requires GHIN_USER + GHIN_PASSWORD env vars (GitHub Secrets).
 // =============================================================================
 
 import { readFile, writeFile } from 'node:fs/promises';
@@ -40,15 +23,15 @@ const FIREBASE_BODY = {
 };
 
 const GHIN_API_BASE = 'https://api2.ghin.com/api/v1';
-const LOGIN_URL  = `${GHIN_API_BASE}/golfer_login.json`;
-const GOLFERS_URL = `${GHIN_API_BASE}/golfers.json`; // search by ghin=<n>
+const LOGIN_URL    = `${GHIN_API_BASE}/golfer_login.json`;
+const GOLFERS_URL  = `${GHIN_API_BASE}/golfers.json`;
 
 const CLIENT_SOURCE = 'GHINcom';
 const UA = 'ghin-friends-snapshot/1.0';
 
 const FRIENDS_PATH = 'friends.json';
 const DATA_PATH    = 'data.json';
-const TODAY_UTC    = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+const TODAY_UTC    = new Date().toISOString().slice(0, 10);
 
 // ---- helpers ----------------------------------------------------------------
 async function loadJson(path, fallback) {
@@ -109,22 +92,81 @@ async function loginGhin(firebaseToken, user, password) {
   return jwt;
 }
 
-// ---- fetch one golfer -------------------------------------------------------
-async function fetchGolfer(jwt, ghin) {
-  // /golfers.json?ghin=<n>&from_ghin=true returns the matching golfer record
-  // including handicap_index, low_hi_value, low_hi_date, club_name, etc.
-  const url = `${GOLFERS_URL}?ghin=${encodeURIComponent(ghin)}&from_ghin=true&per_page=1&page=1`;
+// ---- search / resolve -------------------------------------------------------
+function splitName(s) {
+  const parts = (s || '').trim().split(/\s+/);
+  if (parts.length === 1) return { firstName: '', lastName: parts[0] || '' };
+  return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+}
+
+const CLUB_NOISE = /\b(country club|golf club|the|cc|gc|gcc)\b/gi;
+function clubMatches(a, b) {
+  if (!a || !b) return false;
+  const na = a.toLowerCase().replace(CLUB_NOISE, '').replace(/\s+/g, ' ').trim();
+  const nb = b.toLowerCase().replace(CLUB_NOISE, '').replace(/\s+/g, ' ').trim();
+  return !!na && !!nb && (na.includes(nb) || nb.includes(na));
+}
+
+async function searchGolfers(jwt, params) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') q.set(k, String(v));
+  q.set('per_page', '100');
+  q.set('page', '1');
+  const url = `${GOLFERS_URL}?${q.toString()}`;
   const json = await getJson(url, jwt);
-  const g = json.golfers?.[0];
-  if (!g) throw new Error(`No golfer returned for GHIN ${ghin}`);
-  return {
-    handicapIndex: toFloat(g.handicap_index ?? g.hi_value),
-    lowHi:         toFloat(g.low_hi_value ?? g.low_hi),
-    lowHiDate:     g.low_hi_date || null, // YYYY-MM-DD or null
-    firstName:     g.first_name || '',
-    lastName:      g.last_name  || '',
-    clubName:      g.club_name  || '',
-  };
+  return json.golfers || [];
+}
+
+async function resolveFriend(jwt, f) {
+  // Fastest path: if ghin is already known, look up directly.
+  if (f.ghin) {
+    const results = await searchGolfers(jwt, { ghin: f.ghin, from_ghin: 'true' });
+    if (!results.length) throw new Error(`No golfer for GHIN ${f.ghin}`);
+    return results[0];
+  }
+
+  const { firstName, lastName } = splitName(f.name);
+  if (!lastName) throw new Error('Entry has no usable name');
+
+  // Search by first + last + state. Country defaults to USA (only US is on GHIN).
+  let results = await searchGolfers(jwt, {
+    first_name: firstName,
+    last_name:  lastName,
+    state:      (f.state || '').toUpperCase(),
+    country:    f.country || 'USA',
+    status:     'Active',
+  });
+
+  // If user typed a nickname (e.g. "Kev" vs "Kevin"), the API may miss.
+  // Retry without first_name and locally filter by first-name-startsWith.
+  if (results.length === 0 && firstName) {
+    const broad = await searchGolfers(jwt, {
+      last_name: lastName,
+      state:     (f.state || '').toUpperCase(),
+      country:   f.country || 'USA',
+      status:    'Active',
+    });
+    const fn = firstName.toLowerCase();
+    results = broad.filter(g => (g.first_name || '').toLowerCase().startsWith(fn));
+  }
+
+  // Narrow by club name if provided and we still have multiple matches.
+  if (f.club && results.length > 1) {
+    const narrowed = results.filter(g => clubMatches(g.club_name, f.club));
+    if (narrowed.length) results = narrowed;
+  }
+
+  if (results.length === 0) {
+    const detail = [f.state && `state=${f.state}`, f.club && `club="${f.club}"`].filter(Boolean).join(', ');
+    throw new Error(`No GHIN match for "${f.name}"${detail ? ' (' + detail + ')' : ''}`);
+  }
+  if (results.length > 1) {
+    const sample = results.slice(0, 3)
+      .map(g => `${g.first_name} ${g.last_name} @ ${g.club_name || '?'} [${g.state || '?'}, GHIN ${g.ghin}]`)
+      .join('; ');
+    throw new Error(`Ambiguous: ${results.length} matches for "${f.name}". Add state or refine club. First few: ${sample}`);
+  }
+  return results[0];
 }
 
 // ---- data merging -----------------------------------------------------------
@@ -158,44 +200,59 @@ async function main() {
   console.log('Authenticating to GHIN...');
   const firebaseToken = await getFirebaseToken();
   const jwt = await loginGhin(firebaseToken, user, pass);
-  console.log('Authenticated. Fetching', friends.length, 'golfer(s).');
+  console.log('Authenticated. Resolving', friends.length, 'friend(s).');
 
-  let okCount = 0;
-  let failCount = 0;
+  let okCount = 0, failCount = 0, friendsChanged = false;
 
-  for (const f of friends) {
-    if (!f?.ghin) { console.warn('Skipping friend without ghin:', f); continue; }
+  for (let idx = 0; idx < friends.length; idx++) {
+    const f = friends[idx];
+    if (!f) continue;
     try {
-      const r = await fetchGolfer(jwt, f.ghin);
-      if (r.handicapIndex === null) throw new Error('Response had no handicap_index');
+      const g = await resolveFriend(jwt, f);
+      const ghinKey = String(g.ghin);
 
-      const fullName = [r.firstName, r.lastName].filter(Boolean).join(' ').trim() || f.name;
-      const g = (data.golfers[f.ghin] ??= { name: fullName, club: r.clubName || f.club || '', rows: [] });
-      g.name = fullName;
-      g.club = r.clubName || f.club || g.club;
-      if (r.lowHi !== null) g.lastReportedLow12mo = r.lowHi;
-      if (r.lowHiDate) g.lastReportedLowDate = r.lowHiDate;
-
-      // Seed one historical point on first sight: GHIN's own "low handicap"
-      // value at its dated low. We only insert it if rows is empty, so we
-      // don't pollute existing data on subsequent runs.
-      if (g.rows.length === 0 && r.lowHi !== null && r.lowHiDate) {
-        upsertRow(g.rows, r.lowHiDate, r.lowHi);
+      // Enrich friends entry with resolved ghin so future runs skip search.
+      if (!f.ghin) {
+        friends[idx] = { ghin: ghinKey, ...f };
+        friendsChanged = true;
       }
 
-      const added = upsertRow(g.rows, TODAY_UTC, r.handicapIndex);
-      console.log(`${added ? '+' : '~'} ${f.ghin} (${fullName}): ${r.handicapIndex}`);
+      const fullName = [g.first_name, g.last_name].filter(Boolean).join(' ').trim() || f.name;
+      const clubName = g.club_name || f.club || '';
+      const hi       = toFloat(g.handicap_index ?? g.hi_value);
+      const lowHi    = toFloat(g.low_hi_value ?? g.low_hi);
+
+      if (hi === null) throw new Error('Response had no handicap_index');
+
+      const entry = (data.golfers[ghinKey] ??= { name: fullName, club: clubName, rows: [] });
+      entry.name = fullName;
+      entry.club = clubName;
+      if (lowHi !== null) entry.lastReportedLow12mo = lowHi;
+      if (g.low_hi_date)  entry.lastReportedLowDate = g.low_hi_date;
+
+      // First-sight backfill: seed GHIN's own low-handicap point on first run.
+      if (entry.rows.length === 0 && lowHi !== null && g.low_hi_date) {
+        upsertRow(entry.rows, g.low_hi_date, lowHi);
+      }
+
+      const added = upsertRow(entry.rows, TODAY_UTC, hi);
+      console.log(`${added ? '+' : '~'} ${ghinKey} (${fullName}): ${hi}`);
       okCount++;
     } catch (err) {
-      console.error(`! ${f.ghin} (${f.name || ''}): ${err.message}`);
+      console.error(`! ${f.name || '(unnamed)'}: ${err.message}`);
       failCount++;
     }
   }
 
   data.updatedAt = new Date().toISOString();
   await writeFile(DATA_PATH, JSON.stringify(data, null, 2) + '\n');
-  console.log(`\nDone. ${okCount} ok, ${failCount} failed.`);
 
+  if (friendsChanged) {
+    await writeFile(FRIENDS_PATH, JSON.stringify(friends, null, 2) + '\n');
+    console.log('Enriched friends.json with resolved GHIN numbers.');
+  }
+
+  console.log(`\nDone. ${okCount} ok, ${failCount} failed.`);
   if (okCount === 0 && failCount > 0) process.exit(1);
 }
 
