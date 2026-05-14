@@ -13,7 +13,6 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.json">
 
-<!-- Pinned libs from CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
@@ -41,10 +40,11 @@
 
   header {
     display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 16px;
+    margin-bottom: 16px; gap: 8px;
   }
   h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .head-actions { display: flex; gap: 6px; align-items: center; }
 
   button {
     font: inherit; border: 0; cursor: pointer; -webkit-appearance: none;
@@ -53,13 +53,23 @@
     min-height: 44px;
   }
   button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
-  button.ghost { background: transparent; color: var(--accent); padding: 6px 8px; min-height: 0; }
+  button.ghost { background: transparent; color: var(--accent); padding: 6px 10px; min-height: 0; font-weight: 500; }
+  button.danger { background: var(--decline); }
+  button.icon  { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    padding: 0; width: 44px; height: 44px; font-size: 18px; }
   button:active { filter: brightness(0.95); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .spinner { display: inline-block; width: 14px; height: 14px; vertical-align: -2px;
+    border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+    animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
-  .stale {
-    background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
+  .banner {
     padding: 8px 12px; border-radius: 8px; font-size: 12px; margin-bottom: 12px;
   }
+  .banner.warn  { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  .banner.error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+  .banner.ok    { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
 
   .friends { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
   .friend {
@@ -67,9 +77,7 @@
     padding: 12px 14px; display: flex; align-items: center; gap: 12px;
     box-shadow: var(--shadow);
   }
-  .friend .swatch {
-    width: 10px; height: 32px; border-radius: 3px; flex: 0 0 10px;
-  }
+  .friend .swatch { width: 10px; height: 32px; border-radius: 3px; flex: 0 0 10px; }
   .friend .info { flex: 1; min-width: 0; }
   .friend .name { font-weight: 600; font-size: 15px; line-height: 1.2; }
   .friend .club { color: var(--muted); font-size: 12px; margin-top: 2px;
@@ -80,6 +88,15 @@
   .friend .delta.improve { color: var(--improve); }
   .friend .delta.decline { color: var(--decline); }
   .friend .delta.flat    { color: var(--muted); }
+  .friend .x {
+    background: transparent; color: var(--muted); border: 0; padding: 4px 10px;
+    font-size: 22px; line-height: 1; min-height: 0;
+  }
+  .friend .x:hover { color: var(--decline); }
+
+  .list-actions {
+    display: flex; justify-content: flex-end; margin: -8px 0 12px;
+  }
 
   .empty {
     background: var(--panel); border: 1px dashed var(--border); border-radius: 10px;
@@ -107,35 +124,31 @@
   .modal {
     background: var(--panel); border-radius: 16px 16px 0 0; width: 100%;
     max-width: 600px; padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
-    max-height: 85vh; overflow-y: auto;
+    max-height: 90vh; overflow-y: auto;
   }
   @media (min-width: 600px) {
     .modal-back { align-items: center; }
     .modal { border-radius: 16px; }
   }
   .modal h2 { margin: 0 0 12px; font-size: 18px; }
-  .search-row { display: flex; gap: 8px; }
-  .search-row input {
-    flex: 1; padding: 12px; border: 1px solid var(--border); border-radius: 8px;
-    font-size: 16px; outline: none; min-height: 44px;
+  .modal p, .modal ol, .modal ul { font-size: 14px; color: var(--text); line-height: 1.5; }
+  .modal ol { padding-left: 20px; }
+  .modal code {
+    background: var(--panel-2); padding: 1px 5px; border-radius: 4px;
+    font-size: 12px; font-family: ui-monospace, Menlo, monospace;
   }
-  .search-row input:focus { border-color: var(--accent); }
-  .results { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
-  .result {
-    text-align: left; background: var(--panel-2); border: 1px solid var(--border);
-    color: var(--text); padding: 10px 12px; border-radius: 8px; font-weight: 500;
-    display: block; min-height: 44px;
+  .modal .muted { color: var(--muted); font-size: 12px; }
+
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  .field input {
+    padding: 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 16px; outline: none; min-height: 44px; background: var(--panel);
   }
-  .result .r-club { display: block; color: var(--muted); font-size: 12px; font-weight: 400; margin-top: 2px; }
-  .snippet {
-    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
-    padding: 12px; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
-    white-space: pre-wrap; word-break: break-all; margin-top: 12px;
-  }
-  .modal-msg { color: var(--muted); font-size: 13px; margin: 12px 0; }
-  .modal-msg.error { color: var(--decline); }
-  .modal-actions { display: flex; gap: 8px; margin-top: 12px; }
-  .modal-actions button { flex: 1; }
+  .field input:focus { border-color: var(--accent); }
+
+  .modal-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .modal-actions button { flex: 1; min-width: 0; }
 
   .hidden { display: none !important; }
 </style>
@@ -143,15 +156,23 @@
 <body>
 <div class="wrap">
   <header>
-    <div>
+    <div style="min-width: 0; flex: 1;">
       <h1>GHIN Friends</h1>
       <div class="sub" id="lastUpdated">Loading…</div>
     </div>
-    <button id="addBtn">+ Add</button>
+    <div class="head-actions">
+      <button class="icon" id="refreshBtn" title="Run snapshot now" aria-label="Run snapshot">↻</button>
+      <button id="addBtn">+ Add</button>
+    </div>
   </header>
 
-  <div id="staleNotice" class="stale hidden"></div>
+  <div id="staleNotice" class="banner warn hidden"></div>
+  <div id="topBanner"   class="banner hidden"></div>
+
   <div id="friendsList" class="friends"></div>
+  <div class="list-actions">
+    <button class="ghost hidden" id="editToggle">Manage</button>
+  </div>
 
   <div id="chartCard">
     <div id="chartWrap">
@@ -162,22 +183,74 @@
   </div>
 </div>
 
-<!-- Add Friend modal -->
+<!-- Modal: setup OR add-friend depending on PAT state -->
 <div class="modal-back" id="modal">
   <div class="modal">
-    <h2>Add a friend</h2>
-    <div class="modal-msg">
-      <ol style="padding-left: 20px; margin: 0; line-height: 1.6;">
-        <li>Open the <strong>GHIN</strong> app on your phone.</li>
-        <li>Tap <strong>Find Golfer</strong>, search for your friend, and note their <strong>GHIN number</strong>.</li>
-        <li>Tap the button below to open <code>friends.json</code> on GitHub.</li>
-        <li>Add an entry like <code>{ "ghin": "1234567", "name": "Jane Smith", "club": "Pebble Beach" }</code> inside the <code>[ ]</code> brackets (commas between entries).</li>
-        <li>Commit. The next daily run picks them up — or trigger Actions &rarr; Run workflow for an instant update.</li>
+
+    <!-- Setup view -->
+    <div id="setupView" class="hidden">
+      <h2>Connect to GitHub</h2>
+      <p>To add friends from this app, paste a GitHub <strong>fine-grained Personal Access Token</strong> below. The token is stored on this device only and is scoped to <code>KAG204/ghin-friends</code> — it can update <code>friends.json</code> and trigger your daily snapshot, nothing else.</p>
+      <ol>
+        <li>Tap the link below to open GitHub's token page.</li>
+        <li>Token name: <code>ghin-friends app</code>. Expiration: pick whatever you want.</li>
+        <li>"Repository access" → <strong>Only select repositories</strong> → choose <code>ghin-friends</code>.</li>
+        <li>"Repository permissions": set <strong>Contents</strong> = Read and write, <strong>Actions</strong> = Read and write. (Metadata: Read is auto-included.)</li>
+        <li>Generate, copy the token (starts with <code>github_pat_</code>), and paste below.</li>
       </ol>
+      <p><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Open GitHub token page →</a></p>
+      <div class="field">
+        <label for="patInput">Personal access token</label>
+        <input id="patInput" type="password" placeholder="github_pat_..." autocomplete="off" spellcheck="false">
+      </div>
+      <div id="setupMsg" class="muted"></div>
+      <div class="modal-actions">
+        <button id="savePat">Save token</button>
+        <button class="secondary" id="setupCancel">Cancel</button>
+      </div>
     </div>
-    <div class="modal-actions">
-      <button id="openFriendsJson">Open friends.json on GitHub</button>
-      <button class="secondary" id="closeModal">Close</button>
+
+    <!-- Add friend view -->
+    <div id="addView" class="hidden">
+      <h2>Add a friend</h2>
+      <p class="muted">Find the GHIN number in your GHIN mobile app under "Find Golfer".</p>
+      <form id="addForm">
+        <div class="field">
+          <label for="fGhin">GHIN number</label>
+          <input id="fGhin" name="ghin" inputmode="numeric" autocomplete="off" required>
+        </div>
+        <div class="field">
+          <label for="fName">Display name</label>
+          <input id="fName" name="name" autocapitalize="words" autocomplete="off" required>
+        </div>
+        <div class="field">
+          <label for="fClub">Home club (optional)</label>
+          <input id="fClub" name="club" autocapitalize="words" autocomplete="off">
+        </div>
+        <div id="addMsg" class="muted"></div>
+        <div class="modal-actions">
+          <button type="submit" id="addSave">Add</button>
+          <button type="button" class="secondary" id="addAndRun">Add &amp; run now</button>
+        </div>
+      </form>
+      <div style="margin-top: 16px; text-align: center;">
+        <button class="ghost" id="changeToken">Change GitHub token</button>
+      </div>
+    </div>
+
+    <!-- Remove confirmation view -->
+    <div id="removeView" class="hidden">
+      <h2>Remove friend?</h2>
+      <p id="removeText">This will remove them from your tracker. Their past data is preserved in <code>data.json</code> and will be restored if you re-add them.</p>
+      <div id="removeMsg" class="muted"></div>
+      <div class="modal-actions">
+        <button class="danger" id="removeConfirm">Remove</button>
+        <button class="secondary" id="removeCancel">Cancel</button>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top: 8px;">
+      <button class="ghost" id="closeModal">Close</button>
     </div>
   </div>
 </div>
@@ -187,13 +260,11 @@
   // =========================================================================
   // CONFIG
   // =========================================================================
-
-  // URL of THIS repo on GitHub — used to open friends.json for editing.
-  // Update after you push your repo. Format: <user>/<repo>
-  const GITHUB_REPO = 'KAG204/ghin-friends';
-
-  const MONTHS = 12;
-  const CACHE_KEY = 'ghinDataCache';
+  const GITHUB_REPO  = 'KAG204/ghin-friends';
+  const WORKFLOW_ID  = 'snapshot.yml';
+  const TOKEN_KEY    = 'ghinFriendsPAT';
+  const CACHE_KEY    = 'ghinDataCache';
+  const MONTHS       = 12;
   const PALETTE = [
     '#1a4d2e', '#b91c1c', '#1d4ed8', '#a855f7',
     '#ea580c', '#0891b2', '#ca8a04', '#db2777',
@@ -202,31 +273,139 @@
   // =========================================================================
   // DOM
   // =========================================================================
-  const $lastUpdated = document.getElementById('lastUpdated');
-  const $staleNotice = document.getElementById('staleNotice');
-  const $friendsList = document.getElementById('friendsList');
-  const $chartEmpty  = document.getElementById('chartEmpty');
-  const $canvas      = document.getElementById('chart');
+  const $  = (id) => document.getElementById(id);
+  const $lastUpdated = $('lastUpdated');
+  const $staleNotice = $('staleNotice');
+  const $topBanner   = $('topBanner');
+  const $friendsList = $('friendsList');
+  const $editToggle  = $('editToggle');
+  const $chartEmpty  = $('chartEmpty');
+  const $canvas      = $('chart');
 
-  const $modal            = document.getElementById('modal');
-  const $addBtn           = document.getElementById('addBtn');
-  const $closeModal       = document.getElementById('closeModal');
-  const $openFriendsJson  = document.getElementById('openFriendsJson');
+  const $modal       = $('modal');
+  const $addBtn      = $('addBtn');
+  const $refreshBtn  = $('refreshBtn');
+  const $closeModal  = $('closeModal');
+
+  // setup
+  const $setupView   = $('setupView');
+  const $patInput    = $('patInput');
+  const $savePat     = $('savePat');
+  const $setupCancel = $('setupCancel');
+  const $setupMsg    = $('setupMsg');
+  // add
+  const $addView    = $('addView');
+  const $addForm    = $('addForm');
+  const $fGhin      = $('fGhin');
+  const $fName      = $('fName');
+  const $fClub      = $('fClub');
+  const $addSave    = $('addSave');
+  const $addAndRun  = $('addAndRun');
+  const $addMsg     = $('addMsg');
+  const $changeToken = $('changeToken');
+  // remove
+  const $removeView    = $('removeView');
+  const $removeText    = $('removeText');
+  const $removeConfirm = $('removeConfirm');
+  const $removeCancel  = $('removeCancel');
+  const $removeMsg     = $('removeMsg');
 
   // =========================================================================
   // State
   // =========================================================================
-  let data = { golfers: {}, updatedAt: null }; // shape mirrors data.json
+  let data = { golfers: {}, updatedAt: null };
   let chart;
+  let editMode = false;
+  let pendingRemoveGhin = null;
+
+  // =========================================================================
+  // PAT helpers
+  // =========================================================================
+  const getPat = () => localStorage.getItem(TOKEN_KEY) || '';
+  const setPat = (v) => { if (v) localStorage.setItem(TOKEN_KEY, v); else localStorage.removeItem(TOKEN_KEY); };
+
+  // =========================================================================
+  // GitHub API
+  // =========================================================================
+  function utf8ToBase64(str) {
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+  function base64ToUtf8(str) {
+    return decodeURIComponent(escape(atob(str.replace(/\n/g, ''))));
+  }
+
+  async function ghFetch(url, opts = {}) {
+    const pat = getPat();
+    if (!pat) throw new Error('No GitHub token — set one in Setup.');
+    const res = await fetch(url, {
+      ...opts,
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'Authorization': `Bearer ${pat}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.json())?.message || ''; } catch {}
+      const err = new Error(`GitHub ${res.status}: ${detail || res.statusText}`);
+      err.status = res.status;
+      throw err;
+    }
+    return res;
+  }
+
+  async function ghValidate() {
+    const res = await ghFetch(`https://api.github.com/repos/${GITHUB_REPO}`);
+    return res.json();
+  }
+
+  async function ghGetFile(path) {
+    const res = await ghFetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`);
+    const file = await res.json();
+    const text = base64ToUtf8(file.content);
+    return { sha: file.sha, json: JSON.parse(text) };
+  }
+
+  async function ghPutFile(path, json, sha, message) {
+    const content = utf8ToBase64(JSON.stringify(json, null, 2) + '\n');
+    await ghFetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`, {
+      method: 'PUT',
+      body: JSON.stringify({ message, content, sha }),
+    });
+  }
+
+  async function ghTriggerWorkflow() {
+    await ghFetch(`https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${WORKFLOW_ID}/dispatches`, {
+      method: 'POST',
+      body: JSON.stringify({ ref: 'main' }),
+    });
+  }
+
+  async function apiAddFriend({ ghin, name, club }) {
+    const { sha, json } = await ghGetFile('friends.json');
+    if (json.find(f => String(f.ghin) === String(ghin))) {
+      throw new Error('Already tracking this GHIN.');
+    }
+    json.push({ ghin: String(ghin), name, club: club || '' });
+    await ghPutFile('friends.json', json, sha, `Add ${name} (GHIN ${ghin})`);
+  }
+
+  async function apiRemoveFriend(ghin) {
+    const { sha, json } = await ghGetFile('friends.json');
+    const idx = json.findIndex(f => String(f.ghin) === String(ghin));
+    if (idx < 0) throw new Error('Not in friends.json (already removed?).');
+    const removed = json.splice(idx, 1)[0];
+    await ghPutFile('friends.json', json, sha, `Remove ${removed.name || 'friend'} (GHIN ${ghin})`);
+  }
 
   // =========================================================================
   // Date helpers
   // =========================================================================
-  function windowStart() {
-    const d = new Date();
-    d.setMonth(d.getMonth() - MONTHS);
-    return d;
-  }
+  function windowStart() { const d = new Date(); d.setMonth(d.getMonth() - MONTHS); return d; }
+  function toLocalDateStr(d) { return d.toLocaleDateString('en-CA'); }
   function fmtAgo(iso) {
     if (!iso) return 'never';
     const ms = Date.now() - new Date(iso).getTime();
@@ -238,11 +417,10 @@
   }
 
   // =========================================================================
-  // Data load: try network, fall back to localStorage cache
+  // Data load
   // =========================================================================
   async function loadData() {
     try {
-      // cache-bust so iOS doesn't serve a stale JSON from disk
       const res = await fetch('./data.json?t=' + Date.now(), { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const fresh = await res.json();
@@ -255,17 +433,24 @@
     }
   }
 
+  async function refreshData() {
+    const result = await loadData();
+    data = result.data || { golfers: {}, updatedAt: null };
+    renderHeader(result.source);
+    renderFriends();
+    renderChart();
+  }
+
   // =========================================================================
   // Rendering
   // =========================================================================
-  function colorFor(ghin, idx) { return PALETTE[idx % PALETTE.length]; }
+  function colorFor(_g, idx) { return PALETTE[idx % PALETTE.length]; }
 
   function trailingDelta(rows) {
     if (!Array.isArray(rows) || rows.length < 2) return null;
-    const start = windowStart();
-    const startStr = toLocalDateStr(start);
+    const startStr = toLocalDateStr(windowStart());
     const inWindow = rows.filter(r => r.d >= startStr);
-    const considered = inWindow.length >= 2 ? inWindow : rows; // fall back to all-time for cold start
+    const considered = inWindow.length >= 2 ? inWindow : rows;
     const first = considered[0], last = considered[considered.length - 1];
     return {
       delta: last.i - first.i,
@@ -274,21 +459,16 @@
       days: Math.round((new Date(last.d) - new Date(first.d)) / 86400000),
     };
   }
-  function toLocalDateStr(d) {
-    // YYYY-MM-DD in local time (vs ISO which is UTC)
-    return d.toLocaleDateString('en-CA');
-  }
 
   function renderFriends() {
     const ghins = Object.keys(data.golfers || {});
     $friendsList.innerHTML = '';
+    $editToggle.classList.toggle('hidden', ghins.length === 0);
 
     if (ghins.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty';
-      empty.innerHTML = `No friends yet. Tap <strong>+ Add</strong> to find friends by name, or edit
-        <a href="https://github.com/${GITHUB_REPO}/edit/main/friends.json" target="_blank" rel="noopener">friends.json</a>
-        on GitHub directly.`;
+      empty.innerHTML = `No friends yet. Tap <strong>+ Add</strong> to add one.`;
       $friendsList.appendChild(empty);
       return;
     }
@@ -317,7 +497,7 @@
       num.className = 'num';
       const idxEl = document.createElement('div');
       idxEl.className = 'index';
-      idxEl.textContent = d ? d.latest.toFixed(1) : '—';
+      idxEl.textContent = d ? d.latest.toFixed(1) : (g.rows?.length ? g.rows[g.rows.length-1].i.toFixed(1) : '—');
       const deltaEl = document.createElement('div');
       if (!d) {
         deltaEl.className = 'delta flat';
@@ -332,14 +512,23 @@
       num.append(idxEl, deltaEl);
 
       card.append(sw, info, num);
+
+      if (editMode) {
+        const x = document.createElement('button');
+        x.className = 'x';
+        x.textContent = '×';
+        x.title = `Remove ${g.name || ghin}`;
+        x.addEventListener('click', () => openRemove(ghin));
+        card.append(x);
+      }
+
       $friendsList.appendChild(card);
     });
   }
 
   function renderChart() {
     const ghins = Object.keys(data.golfers || {});
-    const start = windowStart();
-    const startStr = toLocalDateStr(start);
+    const startStr = toLocalDateStr(windowStart());
 
     const datasets = ghins.map((ghin, idx) => {
       const g = data.golfers[ghin];
@@ -387,8 +576,6 @@
   function renderHeader(source) {
     const when = data.updatedAt ? fmtAgo(data.updatedAt) : 'never';
     $lastUpdated.textContent = `Updated ${when}` + (source === 'cache' ? ' (offline cache)' : '');
-
-    // Staleness notice: > 36h means the cron probably failed yesterday
     if (data.updatedAt) {
       const hrs = (Date.now() - new Date(data.updatedAt).getTime()) / 3600000;
       if (hrs > 36) {
@@ -400,17 +587,139 @@
     }
   }
 
-  // =========================================================================
-  // Add Friend modal — opens the GitHub editor for friends.json
-  // =========================================================================
-  function openModal()  { $modal.classList.add('open'); }
-  function closeModal() { $modal.classList.remove('open'); }
+  function showBanner(kind, text, autoHideMs) {
+    $topBanner.className = `banner ${kind}`;
+    $topBanner.textContent = text;
+    $topBanner.classList.remove('hidden');
+    if (autoHideMs) setTimeout(() => $topBanner.classList.add('hidden'), autoHideMs);
+  }
 
-  $addBtn.addEventListener('click', openModal);
-  $closeModal.addEventListener('click', closeModal);
-  $modal.addEventListener('click', (e) => { if (e.target === $modal) closeModal(); });
-  $openFriendsJson.addEventListener('click', () => {
-    window.open(`https://github.com/${GITHUB_REPO}/edit/main/friends.json`, '_blank');
+  // =========================================================================
+  // Modal views
+  // =========================================================================
+  function showView(name) {
+    for (const v of [$setupView, $addView, $removeView]) v.classList.add('hidden');
+    if (name === 'setup')  $setupView.classList.remove('hidden');
+    if (name === 'add')    $addView.classList.remove('hidden');
+    if (name === 'remove') $removeView.classList.remove('hidden');
+  }
+
+  function openModal(view) { showView(view); $modal.classList.add('open'); }
+  function closeModalFn()  { $modal.classList.remove('open'); $setupMsg.textContent=''; $addMsg.textContent=''; $removeMsg.textContent=''; }
+
+  function openAddOrSetup() {
+    if (!getPat()) { $patInput.value = ''; openModal('setup'); }
+    else { $fGhin.value=''; $fName.value=''; $fClub.value=''; $addMsg.textContent=''; openModal('add'); setTimeout(()=>$fGhin.focus(), 50); }
+  }
+
+  function openRemove(ghin) {
+    if (!getPat()) { openModal('setup'); return; }
+    pendingRemoveGhin = ghin;
+    const g = data.golfers[ghin];
+    $removeText.innerHTML = `Remove <strong>${g?.name || 'GHIN '+ghin}</strong> from your tracker? Their past data stays in <code>data.json</code> so re-adding restores the chart.`;
+    $removeMsg.textContent = '';
+    openModal('remove');
+  }
+
+  // =========================================================================
+  // Handlers
+  // =========================================================================
+  $addBtn.addEventListener('click', openAddOrSetup);
+  $closeModal.addEventListener('click', closeModalFn);
+  $modal.addEventListener('click', (e) => { if (e.target === $modal) closeModalFn(); });
+  $setupCancel.addEventListener('click', closeModalFn);
+  $removeCancel.addEventListener('click', closeModalFn);
+  $changeToken.addEventListener('click', () => { $patInput.value = ''; openModal('setup'); });
+
+  $editToggle.addEventListener('click', () => {
+    editMode = !editMode;
+    $editToggle.textContent = editMode ? 'Done' : 'Manage';
+    renderFriends();
+  });
+
+  $savePat.addEventListener('click', async () => {
+    const v = $patInput.value.trim();
+    if (!v) { $setupMsg.textContent = 'Paste a token first.'; return; }
+    $setupMsg.innerHTML = '<span class="spinner"></span> Verifying…';
+    $savePat.disabled = true;
+    try {
+      setPat(v);
+      await ghValidate();
+      $setupMsg.textContent = '';
+      closeModalFn();
+      showBanner('ok', 'GitHub token saved. You can add friends now.', 3000);
+      openAddOrSetup();
+    } catch (err) {
+      setPat('');
+      $setupMsg.textContent = `Failed: ${err.message}`;
+    } finally {
+      $savePat.disabled = false;
+    }
+  });
+
+  async function submitAdd(triggerAfter) {
+    const ghin = $fGhin.value.trim();
+    const name = $fName.value.trim();
+    const club = $fClub.value.trim();
+    if (!ghin || !name) { $addMsg.textContent = 'GHIN number and name are required.'; return; }
+    $addSave.disabled = true; $addAndRun.disabled = true;
+    $addMsg.innerHTML = '<span class="spinner"></span> Saving…';
+    try {
+      await apiAddFriend({ ghin, name, club });
+      if (triggerAfter) {
+        $addMsg.innerHTML = '<span class="spinner"></span> Triggering snapshot…';
+        await ghTriggerWorkflow();
+      }
+      closeModalFn();
+      showBanner('ok',
+        triggerAfter
+          ? `Added ${name}. Snapshot running — check back in ~30 sec.`
+          : `Added ${name}. Will appear on next daily run.`,
+        5000);
+    } catch (err) {
+      $addMsg.textContent = `Failed: ${err.message}`;
+    } finally {
+      $addSave.disabled = false; $addAndRun.disabled = false;
+    }
+  }
+
+  $addForm.addEventListener('submit', (e) => { e.preventDefault(); submitAdd(false); });
+  $addAndRun.addEventListener('click', () => submitAdd(true));
+
+  $removeConfirm.addEventListener('click', async () => {
+    if (!pendingRemoveGhin) return;
+    $removeConfirm.disabled = true; $removeCancel.disabled = true;
+    $removeMsg.innerHTML = '<span class="spinner"></span> Removing…';
+    try {
+      const ghin = pendingRemoveGhin;
+      const g = data.golfers[ghin];
+      await apiRemoveFriend(ghin);
+      delete data.golfers[ghin];
+      renderFriends(); renderChart();
+      closeModalFn();
+      showBanner('ok', `Removed ${g?.name || 'friend'}.`, 3000);
+    } catch (err) {
+      $removeMsg.textContent = `Failed: ${err.message}`;
+    } finally {
+      $removeConfirm.disabled = false; $removeCancel.disabled = false;
+      pendingRemoveGhin = null;
+    }
+  });
+
+  $refreshBtn.addEventListener('click', async () => {
+    if (!getPat()) { openModal('setup'); return; }
+    $refreshBtn.disabled = true;
+    const original = $refreshBtn.textContent;
+    $refreshBtn.innerHTML = '<span class="spinner"></span>';
+    try {
+      await ghTriggerWorkflow();
+      showBanner('ok', 'Snapshot triggered. Check back in ~30 sec.', 4000);
+    } catch (err) {
+      showBanner('error', `Trigger failed: ${err.message}`, 5000);
+    } finally {
+      $refreshBtn.disabled = false;
+      $refreshBtn.textContent = original;
+    }
   });
 
   // =========================================================================
@@ -418,11 +727,7 @@
   // =========================================================================
   (async () => {
     try {
-      const result = await loadData();
-      data = result.data || { golfers: {}, updatedAt: null };
-      renderHeader(result.source);
-      renderFriends();
-      renderChart();
+      await refreshData();
     } catch (err) {
       $lastUpdated.textContent = 'Could not load data.json';
       console.error(err);

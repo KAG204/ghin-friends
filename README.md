@@ -128,14 +128,15 @@ You're done. Every day at 14:00 UTC, the cron will snapshot your friends' handic
 
 ## Daily life
 
-**Adding a friend.**
-1. In the GHIN mobile app (you're already logged in), tap **Find Golfer** → search → note the **GHIN number**.
-2. In the PWA, tap **+ Add** → **Open friends.json on GitHub**. Add an entry inside the `[ ]` brackets:
-   ```json
-   { "ghin": "1234567", "name": "Jane Smith", "club": "Pebble Beach GC" }
-   ```
-   (Comma between entries, no trailing comma at the end.) Commit.
-3. Either wait for the next daily run, or hit **Actions → Run workflow** for an instant update.
+**First time you tap "+ Add" on your phone**: the app walks you through creating a GitHub Personal Access Token (~2 minutes). Once it's saved, adding and removing friends is fully in-app.
+
+**Adding a friend (after the one-time PAT setup).**
+1. In the GHIN mobile app, tap **Find Golfer** → search → note the **GHIN number**.
+2. In the PWA, tap **+ Add** → enter GHIN#, name, club → tap **Add** (queues for next daily run) or **Add & run now** (commits to `friends.json` and triggers a snapshot immediately).
+
+**Removing a friend.** Tap **Manage** at the bottom of the list → tap the **×** on a card → confirm. Their past data is preserved in `data.json`, so re-adding them later restores their chart line.
+
+**Refresh on demand.** The **↻** button in the header triggers the snapshot workflow without adding anyone — useful when you want fresh data right now instead of waiting for tomorrow.
 
 **Removing a friend.** Open `friends.json` on GitHub, delete the entry, commit. (The `data.json` history is preserved — re-adding them later restores their chart line.)
 
@@ -156,7 +157,6 @@ You're done. Every day at 14:00 UTC, the cron will snapshot your friends' handic
 ## Future ideas
 
 - Service worker for offline shell + cache versioning (solves the iOS update-stickiness problem)
-- In-app friend search (would require entering GHIN credentials in the browser — security tradeoff)
-- "Add Friend" that auto-commits via a GitHub Personal Access Token (no manual JSON editing)
+- In-app friend search by name (would require entering GHIN credentials in the browser — security tradeoff)
 - Per-friend detail view: recent scores, slope/rating distribution
 - Export to CSV
