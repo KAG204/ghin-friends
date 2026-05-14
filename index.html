@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GHIN Friends</title>
+
+<!-- PWA + iPhone home-screen meta -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GHIN">
+<meta name="theme-color" content="#1a4d2e">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+
+<!-- Pinned libs from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+<style>
+  :root {
+    --bg: #f7f8f5;
+    --panel: #ffffff;
+    --panel-2: #eef0eb;
+    --text: #1a1d1a;
+    --muted: #687368;
+    --accent: #1a4d2e;
+    --accent-soft: #2a7a4a;
+    --improve: #15803d;
+    --decline: #b91c1c;
+    --border: #dde2dc;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 1px 8px rgba(0,0,0,.04);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+  .wrap { max-width: 720px; margin: 0 auto; padding: 16px 16px 32px; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  button {
+    font: inherit; border: 0; cursor: pointer; -webkit-appearance: none;
+    background: var(--accent); color: white;
+    padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 600;
+    min-height: 44px;
+  }
+  button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  button.ghost { background: transparent; color: var(--accent); padding: 6px 8px; min-height: 0; }
+  button:active { filter: brightness(0.95); }
+
+  .stale {
+    background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
+    padding: 8px 12px; border-radius: 8px; font-size: 12px; margin-bottom: 12px;
+  }
+
+  .friends { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .friend {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; display: flex; align-items: center; gap: 12px;
+    box-shadow: var(--shadow);
+  }
+  .friend .swatch {
+    width: 10px; height: 32px; border-radius: 3px; flex: 0 0 10px;
+  }
+  .friend .info { flex: 1; min-width: 0; }
+  .friend .name { font-weight: 600; font-size: 15px; line-height: 1.2; }
+  .friend .club { color: var(--muted); font-size: 12px; margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .friend .num { text-align: right; flex: 0 0 auto; min-width: 80px; }
+  .friend .index { font-size: 20px; font-weight: 700; line-height: 1; }
+  .friend .delta { font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .friend .delta.improve { color: var(--improve); }
+  .friend .delta.decline { color: var(--decline); }
+  .friend .delta.flat    { color: var(--muted); }
+
+  .empty {
+    background: var(--panel); border: 1px dashed var(--border); border-radius: 10px;
+    padding: 24px; text-align: center; color: var(--muted); font-size: 14px;
+  }
+  .empty a { color: var(--accent); }
+
+  #chartCard {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 12px 8px; box-shadow: var(--shadow);
+  }
+  #chartWrap { height: 320px; position: relative; }
+  .chart-caption { font-size: 11px; color: var(--muted); text-align: center; margin-top: 6px; }
+  #chartEmpty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 13px; pointer-events: none;
+  }
+
+  /* Modal */
+  .modal-back {
+    position: fixed; inset: 0; background: rgba(0,0,0,.4);
+    display: none; align-items: flex-end; justify-content: center; z-index: 10;
+  }
+  .modal-back.open { display: flex; }
+  .modal {
+    background: var(--panel); border-radius: 16px 16px 0 0; width: 100%;
+    max-width: 600px; padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    max-height: 85vh; overflow-y: auto;
+  }
+  @media (min-width: 600px) {
+    .modal-back { align-items: center; }
+    .modal { border-radius: 16px; }
+  }
+  .modal h2 { margin: 0 0 12px; font-size: 18px; }
+  .search-row { display: flex; gap: 8px; }
+  .search-row input {
+    flex: 1; padding: 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 16px; outline: none; min-height: 44px;
+  }
+  .search-row input:focus { border-color: var(--accent); }
+  .results { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+  .result {
+    text-align: left; background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 12px; border-radius: 8px; font-weight: 500;
+    display: block; min-height: 44px;
+  }
+  .result .r-club { display: block; color: var(--muted); font-size: 12px; font-weight: 400; margin-top: 2px; }
+  .snippet {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    white-space: pre-wrap; word-break: break-all; margin-top: 12px;
+  }
+  .modal-msg { color: var(--muted); font-size: 13px; margin: 12px 0; }
+  .modal-msg.error { color: var(--decline); }
+  .modal-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .modal-actions button { flex: 1; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>GHIN Friends</h1>
+      <div class="sub" id="lastUpdated">Loading…</div>
+    </div>
+    <button id="addBtn">+ Add</button>
+  </header>
+
+  <div id="staleNotice" class="stale hidden"></div>
+  <div id="friendsList" class="friends"></div>
+
+  <div id="chartCard">
+    <div id="chartWrap">
+      <div id="chartEmpty">Add friends to see the 12-month chart.</div>
+      <canvas id="chart"></canvas>
+    </div>
+    <div class="chart-caption">Lines moving up = handicap improving (lower is better).</div>
+  </div>
+</div>
+
+<!-- Add Friend modal -->
+<div class="modal-back" id="modal">
+  <div class="modal">
+    <h2>Add a friend</h2>
+    <div class="modal-msg">
+      <ol style="padding-left: 20px; margin: 0; line-height: 1.6;">
+        <li>Open the <strong>GHIN</strong> app on your phone.</li>
+        <li>Tap <strong>Find Golfer</strong>, search for your friend, and note their <strong>GHIN number</strong>.</li>
+        <li>Tap the button below to open <code>friends.json</code> on GitHub.</li>
+        <li>Add an entry like <code>{ "ghin": "1234567", "name": "Jane Smith", "club": "Pebble Beach" }</code> inside the <code>[ ]</code> brackets (commas between entries).</li>
+        <li>Commit. The next daily run picks them up — or trigger Actions &rarr; Run workflow for an instant update.</li>
+      </ol>
+    </div>
+    <div class="modal-actions">
+      <button id="openFriendsJson">Open friends.json on GitHub</button>
+      <button class="secondary" id="closeModal">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // =========================================================================
+  // CONFIG
+  // =========================================================================
+
+  // URL of THIS repo on GitHub — used to open friends.json for editing.
+  // Update after you push your repo. Format: <user>/<repo>
+  const GITHUB_REPO = 'your-username/ghin-friends';
+
+  const MONTHS = 12;
+  const CACHE_KEY = 'ghinDataCache';
+  const PALETTE = [
+    '#1a4d2e', '#b91c1c', '#1d4ed8', '#a855f7',
+    '#ea580c', '#0891b2', '#ca8a04', '#db2777',
+  ];
+
+  // =========================================================================
+  // DOM
+  // =========================================================================
+  const $lastUpdated = document.getElementById('lastUpdated');
+  const $staleNotice = document.getElementById('staleNotice');
+  const $friendsList = document.getElementById('friendsList');
+  const $chartEmpty  = document.getElementById('chartEmpty');
+  const $canvas      = document.getElementById('chart');
+
+  const $modal            = document.getElementById('modal');
+  const $addBtn           = document.getElementById('addBtn');
+  const $closeModal       = document.getElementById('closeModal');
+  const $openFriendsJson  = document.getElementById('openFriendsJson');
+
+  // =========================================================================
+  // State
+  // =========================================================================
+  let data = { golfers: {}, updatedAt: null }; // shape mirrors data.json
+  let chart;
+
+  // =========================================================================
+  // Date helpers
+  // =========================================================================
+  function windowStart() {
+    const d = new Date();
+    d.setMonth(d.getMonth() - MONTHS);
+    return d;
+  }
+  function fmtAgo(iso) {
+    if (!iso) return 'never';
+    const ms = Date.now() - new Date(iso).getTime();
+    const hrs = Math.floor(ms / 3600000);
+    if (hrs < 1) return 'just now';
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  }
+
+  // =========================================================================
+  // Data load: try network, fall back to localStorage cache
+  // =========================================================================
+  async function loadData() {
+    try {
+      // cache-bust so iOS doesn't serve a stale JSON from disk
+      const res = await fetch('./data.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const fresh = await res.json();
+      localStorage.setItem(CACHE_KEY, JSON.stringify(fresh));
+      return { source: 'network', data: fresh };
+    } catch (err) {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) return { source: 'cache', data: JSON.parse(raw) };
+      throw err;
+    }
+  }
+
+  // =========================================================================
+  // Rendering
+  // =========================================================================
+  function colorFor(ghin, idx) { return PALETTE[idx % PALETTE.length]; }
+
+  function trailingDelta(rows) {
+    if (!Array.isArray(rows) || rows.length < 2) return null;
+    const start = windowStart();
+    const startStr = toLocalDateStr(start);
+    const inWindow = rows.filter(r => r.d >= startStr);
+    const considered = inWindow.length >= 2 ? inWindow : rows; // fall back to all-time for cold start
+    const first = considered[0], last = considered[considered.length - 1];
+    return {
+      delta: last.i - first.i,
+      latest: last.i,
+      windowed: inWindow.length >= 2,
+      days: Math.round((new Date(last.d) - new Date(first.d)) / 86400000),
+    };
+  }
+  function toLocalDateStr(d) {
+    // YYYY-MM-DD in local time (vs ISO which is UTC)
+    return d.toLocaleDateString('en-CA');
+  }
+
+  function renderFriends() {
+    const ghins = Object.keys(data.golfers || {});
+    $friendsList.innerHTML = '';
+
+    if (ghins.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.innerHTML = `No friends yet. Tap <strong>+ Add</strong> to find friends by name, or edit
+        <a href="https://github.com/${GITHUB_REPO}/edit/main/friends.json" target="_blank" rel="noopener">friends.json</a>
+        on GitHub directly.`;
+      $friendsList.appendChild(empty);
+      return;
+    }
+
+    ghins.forEach((ghin, idx) => {
+      const g = data.golfers[ghin];
+      const d = trailingDelta(g.rows);
+      const card = document.createElement('div');
+      card.className = 'friend';
+
+      const sw = document.createElement('span');
+      sw.className = 'swatch';
+      sw.style.background = colorFor(ghin, idx);
+
+      const info = document.createElement('div');
+      info.className = 'info';
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = g.name || `GHIN ${ghin}`;
+      const club = document.createElement('div');
+      club.className = 'club';
+      club.textContent = g.club || '';
+      info.append(name, club);
+
+      const num = document.createElement('div');
+      num.className = 'num';
+      const idxEl = document.createElement('div');
+      idxEl.className = 'index';
+      idxEl.textContent = d ? d.latest.toFixed(1) : '—';
+      const deltaEl = document.createElement('div');
+      if (!d) {
+        deltaEl.className = 'delta flat';
+        deltaEl.textContent = (g.rows?.length === 1) ? '1 snapshot' : 'no data';
+      } else {
+        const sign  = d.delta < 0 ? '−' : d.delta > 0 ? '+' : '±';
+        const abs   = Math.abs(d.delta).toFixed(1);
+        const label = d.windowed ? '12mo' : `${d.days}d`;
+        deltaEl.className = 'delta ' + (d.delta < 0 ? 'improve' : d.delta > 0 ? 'decline' : 'flat');
+        deltaEl.textContent = `${sign}${abs} ${label}`;
+      }
+      num.append(idxEl, deltaEl);
+
+      card.append(sw, info, num);
+      $friendsList.appendChild(card);
+    });
+  }
+
+  function renderChart() {
+    const ghins = Object.keys(data.golfers || {});
+    const start = windowStart();
+    const startStr = toLocalDateStr(start);
+
+    const datasets = ghins.map((ghin, idx) => {
+      const g = data.golfers[ghin];
+      const rows = (g.rows || [])
+        .filter(r => r.d >= startStr)
+        .map(r => ({ x: new Date(r.d + 'T12:00:00'), y: r.i }));
+      return {
+        label: g.name || `GHIN ${ghin}`,
+        data: rows,
+        borderColor: colorFor(ghin, idx),
+        backgroundColor: colorFor(ghin, idx),
+        spanGaps: true,
+      };
+    }).filter(ds => ds.data.length > 0);
+
+    if (!chart) {
+      chart = new Chart($canvas, {
+        type: 'line',
+        data: { datasets: [] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { labels: { usePointStyle: true, pointStyle: 'line', boxWidth: 20 } },
+            tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}` } },
+          },
+          scales: {
+            x: { type: 'time', time: { unit: 'month', tooltipFormat: 'PP' },
+                 ticks: { color: '#687368', maxRotation: 0 },
+                 grid:  { color: 'rgba(0,0,0,.05)' } },
+            y: { reverse: true, suggestedMin: 0,
+                 title: { display: true, text: 'Handicap Index', color: '#687368' },
+                 ticks: { color: '#687368' },
+                 grid:  { color: 'rgba(0,0,0,.05)' } },
+          },
+          elements: { line: { borderWidth: 2, tension: 0 }, point: { radius: 2 } },
+        },
+      });
+    }
+    chart.data.datasets = datasets;
+    chart.update();
+    $chartEmpty.classList.toggle('hidden', datasets.length > 0);
+  }
+
+  function renderHeader(source) {
+    const when = data.updatedAt ? fmtAgo(data.updatedAt) : 'never';
+    $lastUpdated.textContent = `Updated ${when}` + (source === 'cache' ? ' (offline cache)' : '');
+
+    // Staleness notice: > 36h means the cron probably failed yesterday
+    if (data.updatedAt) {
+      const hrs = (Date.now() - new Date(data.updatedAt).getTime()) / 3600000;
+      if (hrs > 36) {
+        $staleNotice.textContent = `Data is ${Math.floor(hrs / 24)} days old. Check the Actions tab on GitHub for failed runs.`;
+        $staleNotice.classList.remove('hidden');
+      } else {
+        $staleNotice.classList.add('hidden');
+      }
+    }
+  }
+
+  // =========================================================================
+  // Add Friend modal — opens the GitHub editor for friends.json
+  // =========================================================================
+  function openModal()  { $modal.classList.add('open'); }
+  function closeModal() { $modal.classList.remove('open'); }
+
+  $addBtn.addEventListener('click', openModal);
+  $closeModal.addEventListener('click', closeModal);
+  $modal.addEventListener('click', (e) => { if (e.target === $modal) closeModal(); });
+  $openFriendsJson.addEventListener('click', () => {
+    window.open(`https://github.com/${GITHUB_REPO}/edit/main/friends.json`, '_blank');
+  });
+
+  // =========================================================================
+  // Boot
+  // =========================================================================
+  (async () => {
+    try {
+      const result = await loadData();
+      data = result.data || { golfers: {}, updatedAt: null };
+      renderHeader(result.source);
+      renderFriends();
+      renderChart();
+    } catch (err) {
+      $lastUpdated.textContent = 'Could not load data.json';
+      console.error(err);
+    }
+  })();
+})();
+</script>
+</body>
+</html>
