@@ -128,21 +128,24 @@ async function resolveFriend(jwt, f) {
   const { firstName, lastName } = splitName(f.name);
   if (!lastName) throw new Error('Entry has no usable name');
 
-  // Search by first + last name. Country defaults to USA (only US is on GHIN).
+  // Search by first + last name. global_search=true is required by GHIN for
+  // non-GHIN-number searches. Country defaults to USA (only US is on GHIN).
   let results = await searchGolfers(jwt, {
-    first_name: firstName,
-    last_name:  lastName,
-    country:    f.country || 'USA',
-    status:     'Active',
+    global_search: 'true',
+    first_name:    firstName,
+    last_name:     lastName,
+    country:       f.country || 'USA',
+    status:        'Active',
   });
 
   // If user typed a nickname (e.g. "Kev" vs "Kevin"), the API may miss.
   // Retry without first_name and locally filter by first-name-startsWith.
   if (results.length === 0 && firstName) {
     const broad = await searchGolfers(jwt, {
-      last_name: lastName,
-      country:   f.country || 'USA',
-      status:    'Active',
+      global_search: 'true',
+      last_name:     lastName,
+      country:       f.country || 'USA',
+      status:        'Active',
     });
     const fn = firstName.toLowerCase();
     results = broad.filter(g => (g.first_name || '').toLowerCase().startsWith(fn));
