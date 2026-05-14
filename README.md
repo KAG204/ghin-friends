@@ -91,10 +91,10 @@ Both names must match exactly — the workflow YAML refers to `secrets.GHIN_USER
 1. **Add yourself as a friend**. Open `https://github.com/<you>/ghin-friends/edit/main/friends.json` in a browser. Replace the `[]` with:
    ```json
    [
-     { "name": "Your Name", "state": "NC", "club": "Your Country Club" }
+     { "name": "Your Name", "club": "Your Country Club" }
    ]
    ```
-   Use the 2-letter state code. Click the green **Commit changes** button. The daily script will look you up in GHIN by name + state + club, and once it resolves the match it writes your GHIN number back into this file automatically (so subsequent runs are fast).
+   Click the green **Commit changes** button. The daily script will look you up in GHIN by name + club, and once it resolves the match it writes your GHIN number back into this file automatically (so subsequent runs are fast).
 
 2. **Trigger the cron manually**. On github.com, **Actions** tab → "Daily GHIN Snapshot" → **Run workflow** button (right side) → **Run workflow**.
 
@@ -112,8 +112,8 @@ Both names must match exactly — the workflow YAML refers to `secrets.GHIN_USER
 Common failure modes:
 - **"GHIN login response did not contain golfer_user.golfer_user_token"** → wrong email or password in the GitHub secrets. Re-enter both `GHIN_USER` and `GHIN_PASSWORD`.
 - **"Permission denied to github-actions[bot]"** on the commit step → you missed the **Workflow permissions → Read and write** setting in Step 1.8. Fix it and re-run.
-- **"No GHIN match for..."** → name, state, or club is misspelled. Edit the entry and try again.
-- **"Ambiguous: N matches"** → too many people fit. The error log includes the conflicting matches so you can pick the right club name or add state.
+- **"No GHIN match for..."** → name or club is misspelled. Edit the entry and try again.
+- **"Ambiguous: N matches"** → too many people fit. The error log includes the conflicting matches so you can refine the club name.
 
 ### Step 4: Install on iPhone
 
@@ -131,9 +131,9 @@ You're done. Every day at 14:00 UTC, the cron will snapshot your friends' handic
 
 **First time you tap "+ Add" on your phone**: the app walks you through creating a GitHub Personal Access Token (~2 minutes). Once it's saved, adding and removing friends is fully in-app.
 
-**Adding a friend (after the one-time PAT setup).** Tap **+ Add** → enter full name, state (2-letter), and country club → tap **Add** (queues for next daily run) or **Add & run now** (commits + triggers a snapshot immediately). The script searches GHIN with those three fields and resolves the GHIN number automatically.
+**Adding a friend (after the one-time PAT setup).** Tap **+ Add** → enter full name and country club → tap **Add** (queues for next daily run) or **Add & run now** (commits + triggers a snapshot immediately). The script searches GHIN with name + club and resolves the GHIN number automatically.
 
-If a search comes back ambiguous (e.g. two "John Smith"s at the same club, somehow), the workflow log on github.com shows the conflicting matches so you can refine the entry.
+If a search comes back ambiguous (e.g. two "John Smith"s at the same club, somehow), the workflow log on github.com shows the conflicting matches so you can refine the club name.
 
 **Removing a friend.** Tap **Manage** at the bottom of the list → tap the **×** on a card → confirm. Their past data is preserved in `data.json`, so re-adding them later restores their chart line.
 

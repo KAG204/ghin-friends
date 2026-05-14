@@ -213,15 +213,11 @@
     <!-- Add friend view -->
     <div id="addView" class="hidden">
       <h2>Add a friend</h2>
-      <p class="muted">Type their name, state, and country club. The daily snapshot looks them up in GHIN automatically.</p>
+      <p class="muted">Type their full name and country club. The daily snapshot looks them up in GHIN automatically.</p>
       <form id="addForm">
         <div class="field">
           <label for="fName">Full name</label>
           <input id="fName" name="name" autocapitalize="words" autocomplete="off" placeholder="Jane Smith" required>
-        </div>
-        <div class="field">
-          <label for="fState">State (2-letter)</label>
-          <input id="fState" name="state" autocapitalize="characters" autocomplete="off" maxlength="2" placeholder="NC" required>
         </div>
         <div class="field">
           <label for="fClub">Country club / home club</label>
@@ -298,7 +294,6 @@
   const $addView    = $('addView');
   const $addForm    = $('addForm');
   const $fName      = $('fName');
-  const $fState     = $('fState');
   const $fClub      = $('fClub');
   const $addSave    = $('addSave');
   const $addAndRun  = $('addAndRun');
@@ -388,18 +383,17 @@
 
   function friendMatches(a, b) {
     // Two friend entries refer to the same person if their GHIN matches,
-    // or (when GHIN isn't known yet) their name + state + club tuple matches.
+    // or (when GHIN isn't known yet) their name + club pair matches.
     if (a?.ghin && b?.ghin) return String(a.ghin) === String(b.ghin);
     return (a?.name || '').toLowerCase() === (b?.name || '').toLowerCase()
-        && (a?.state || '').toUpperCase() === (b?.state || '').toUpperCase()
         && (a?.club || '').toLowerCase() === (b?.club || '').toLowerCase();
   }
 
-  async function apiAddFriend({ name, state, club }) {
+  async function apiAddFriend({ name, club }) {
     const { sha, json } = await ghGetFile('friends.json');
-    const candidate = { name, state: (state || '').toUpperCase(), club: club || '' };
+    const candidate = { name, club };
     if (json.find(f => friendMatches(f, candidate))) {
-      throw new Error('Already tracking someone with this name + state + club.');
+      throw new Error('Already tracking someone with this name + club.');
     }
     json.push(candidate);
     await ghPutFile('friends.json', json, sha, `Add ${name}`);
@@ -507,7 +501,7 @@
       name.textContent = g?.name || f.name || '(no name)';
       const club = document.createElement('div');
       club.className = 'club';
-      club.textContent = [g?.club || f.club, f.state].filter(Boolean).join(' · ');
+      club.textContent = g?.club || f.club || '';
       info.append(name, club);
 
       const num = document.createElement('div');
@@ -629,7 +623,7 @@
   function openAddOrSetup() {
     if (!getPat()) { $patInput.value = ''; openModal('setup'); }
     else {
-      $fName.value=''; $fState.value=''; $fClub.value=''; $addMsg.textContent='';
+      $fName.value=''; $fClub.value=''; $addMsg.textContent='';
       openModal('add');
       setTimeout(()=>$fName.focus(), 50);
     }
@@ -681,21 +675,16 @@
   });
 
   async function submitAdd(triggerAfter) {
-    const name  = $fName.value.trim();
-    const state = $fState.value.trim().toUpperCase();
-    const club  = $fClub.value.trim();
-    if (!name || !state || !club) {
-      $addMsg.textContent = 'Name, state, and club are all required for accurate matching.';
-      return;
-    }
-    if (!/^[A-Z]{2}$/.test(state)) {
-      $addMsg.textContent = 'State should be a 2-letter abbreviation (e.g. NC).';
+    const name = $fName.value.trim();
+    const club = $fClub.value.trim();
+    if (!name || !club) {
+      $addMsg.textContent = 'Name and club are both required.';
       return;
     }
     $addSave.disabled = true; $addAndRun.disabled = true;
     $addMsg.innerHTML = '<span class="spinner"></span> Saving…';
     try {
-      const added = await apiAddFriend({ name, state, club });
+      const added = await apiAddFriend({ name, club });
       // Optimistic local update
       friends.push(added);
       renderFriends(); renderChart();

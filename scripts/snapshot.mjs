@@ -1,6 +1,6 @@
 // Daily snapshot fetcher — runs on GitHub Actions (Node 20+).
 //
-// Looks up each friend in friends.json by name + state + club (no GHIN# needed),
+// Looks up each friend in friends.json by name + club (no GHIN# needed),
 // fetches their current handicap index, appends today's row to data.json.
 //
 // Once a friend is resolved, the GHIN# is written back into friends.json so
@@ -128,11 +128,10 @@ async function resolveFriend(jwt, f) {
   const { firstName, lastName } = splitName(f.name);
   if (!lastName) throw new Error('Entry has no usable name');
 
-  // Search by first + last + state. Country defaults to USA (only US is on GHIN).
+  // Search by first + last name. Country defaults to USA (only US is on GHIN).
   let results = await searchGolfers(jwt, {
     first_name: firstName,
     last_name:  lastName,
-    state:      (f.state || '').toUpperCase(),
     country:    f.country || 'USA',
     status:     'Active',
   });
@@ -142,7 +141,6 @@ async function resolveFriend(jwt, f) {
   if (results.length === 0 && firstName) {
     const broad = await searchGolfers(jwt, {
       last_name: lastName,
-      state:     (f.state || '').toUpperCase(),
       country:   f.country || 'USA',
       status:    'Active',
     });
@@ -150,21 +148,20 @@ async function resolveFriend(jwt, f) {
     results = broad.filter(g => (g.first_name || '').toLowerCase().startsWith(fn));
   }
 
-  // Narrow by club name if provided and we still have multiple matches.
+  // Narrow by club name. With no state filter, club is our main disambiguator.
   if (f.club && results.length > 1) {
     const narrowed = results.filter(g => clubMatches(g.club_name, f.club));
     if (narrowed.length) results = narrowed;
   }
 
   if (results.length === 0) {
-    const detail = [f.state && `state=${f.state}`, f.club && `club="${f.club}"`].filter(Boolean).join(', ');
-    throw new Error(`No GHIN match for "${f.name}"${detail ? ' (' + detail + ')' : ''}`);
+    throw new Error(`No GHIN match for "${f.name}"${f.club ? ' at "' + f.club + '"' : ''}`);
   }
   if (results.length > 1) {
     const sample = results.slice(0, 3)
-      .map(g => `${g.first_name} ${g.last_name} @ ${g.club_name || '?'} [${g.state || '?'}, GHIN ${g.ghin}]`)
+      .map(g => `${g.first_name} ${g.last_name} @ ${g.club_name || '?'} (GHIN ${g.ghin})`)
       .join('; ');
-    throw new Error(`Ambiguous: ${results.length} matches for "${f.name}". Add state or refine club. First few: ${sample}`);
+    throw new Error(`Ambiguous: ${results.length} matches for "${f.name}". Refine club name. First few: ${sample}`);
   }
   return results[0];
 }
