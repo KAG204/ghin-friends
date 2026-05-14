@@ -128,30 +128,25 @@ async function resolveFriend(jwt, f) {
   const { firstName, lastName } = splitName(f.name);
   if (!lastName) throw new Error('Entry has no usable name');
 
-  // Search by first + last name. global_search=true is required by GHIN for
-  // non-GHIN-number searches. Country defaults to USA (only US is on GHIN).
+  // GHIN's global_search mode takes a single free-text `search` param that
+  // matches across name/club/etc. Pass the full name; narrow by club locally.
   let results = await searchGolfers(jwt, {
     global_search: 'true',
-    first_name:    firstName,
-    last_name:     lastName,
+    search:        f.name.trim(),
     country:       f.country || 'USA',
     status:        'Active',
   });
 
-  // If user typed a nickname (e.g. "Kev" vs "Kevin"), the API may miss.
-  // Retry without first_name and locally filter by first-name-startsWith.
-  if (results.length === 0 && firstName) {
-    const broad = await searchGolfers(jwt, {
-      global_search: 'true',
-      last_name:     lastName,
-      country:       f.country || 'USA',
-      status:        'Active',
-    });
-    const fn = firstName.toLowerCase();
-    results = broad.filter(g => (g.first_name || '').toLowerCase().startsWith(fn));
-  }
+  // Local filter: first-name startsWith (handles nickname → full name) and
+  // last-name match (in case `search` was lenient).
+  const fn = firstName.toLowerCase();
+  const ln = lastName.toLowerCase();
+  results = results.filter(g =>
+    (g.last_name || '').toLowerCase() === ln &&
+    (!fn || (g.first_name || '').toLowerCase().startsWith(fn))
+  );
 
-  // Narrow by club name. With no state filter, club is our main disambiguator.
+  // Narrow by club name. Club is our main disambiguator with no state filter.
   if (f.club && results.length > 1) {
     const narrowed = results.filter(g => clubMatches(g.club_name, f.club));
     if (narrowed.length) results = narrowed;
