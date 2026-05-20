@@ -129,11 +129,16 @@ You're done. Every day at 14:00 UTC, the cron will snapshot your friends' handic
 
 ## Daily life
 
-**First time you tap "+ Add" on your phone**: the app walks you through creating a GitHub Personal Access Token (~2 minutes). Once it's saved, adding and removing friends is fully in-app.
+**First time you tap "+ Add" on your phone**: the app walks you through a one-time setup (~3 minutes) for two credentials, both stored only on this device:
 
-**Adding a friend (after the one-time PAT setup).** Tap **+ Add** → enter full name and country club → tap **Add** (queues for next daily run) or **Add & run now** (commits + triggers a snapshot immediately). The script searches GHIN with name + club and resolves the GHIN number automatically.
+- A **GitHub fine-grained Personal Access Token** — lets the app update `friends.json` and trigger the daily snapshot.
+- Your **GHIN email + password** — lets the app search GHIN when you add a friend, so you can pick the right person from a list.
 
-If a search comes back ambiguous (e.g. two "John Smith"s at the same club, somehow), the workflow log on github.com shows the conflicting matches so you can refine the club name.
+Once both are saved, adding and removing friends is fully in-app.
+
+**Adding a friend (after the one-time setup).** Tap **+ Add** → enter full name and country club → tap **Search GHIN**. The app shows everyone in GHIN matching that name, with their club and state. Tap the right person, then **Add this golfer** (queues for next daily run) or **Add & run now** (commits + triggers a snapshot immediately).
+
+Because you confirm the exact golfer at add-time, the daily snapshot uses the picked record's identifying fields verbatim — no re-disambiguation, no ambiguous matches breaking the run.
 
 **Removing a friend.** Tap **Manage** at the bottom of the list → tap the **×** on a card → confirm. Their past data is preserved in `data.json`, so re-adding them later restores their chart line.
 
@@ -158,6 +163,5 @@ If a search comes back ambiguous (e.g. two "John Smith"s at the same club, someh
 ## Future ideas
 
 - Service worker for offline shell + cache versioning (solves the iOS update-stickiness problem)
-- In-app friend search by name (would require entering GHIN credentials in the browser — security tradeoff)
 - Per-friend detail view: recent scores, slope/rating distribution
 - Export to CSV

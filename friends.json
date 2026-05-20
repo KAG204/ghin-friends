@@ -1,31 +1,22 @@
 [
   {
-    "ghin": "1*****1",
     "name": "Adam Winston",
     "state": "TN",
     "club": "Brentwood Country Club"
   },
   {
-    "ghin": "2*****2",
     "name": "Ed Guaraldi",
     "club": "Vesper Country Club"
   },
   {
-    "name": "Kevin Smith",
-    "club": "Governors Club"
-  },
-  {
-    "ghin": "1*****8",
     "name": "Jon Liening",
     "club": "Governors Club"
   },
   {
-    "ghin": "5*****4",
     "name": "Matthew Schott",
-    "club": "Galloway National Golf Cub"
+    "club": "Galloway National Golf Club"
   },
   {
-    "ghin": "1*****9",
     "name": "Joe Campbell",
     "club": "USGA/Tennessee GC"
   }

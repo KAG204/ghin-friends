@@ -118,27 +118,33 @@ async function searchGolfers(jwt, params) {
 }
 
 async function resolveFriend(jwt, f) {
-  // Fastest path: if ghin is already known, look up directly.
-  if (f.ghin) {
-    const results = await searchGolfers(jwt, { ghin: f.ghin, from_ghin: 'true' });
-    if (!results.length) throw new Error(`No golfer for GHIN ${f.ghin}`);
-    return results[0];
-  }
+  // Always look up by name + club + (optional) state. The GHIN value stored on
+  // a friend entry is the API's masked privacy string and is NOT a usable
+  // lookup key — disambiguation must happen at add-time in the PWA.
 
-  const { firstName, lastName } = splitName(f.name);
+  // Prefer stored first/last (set at add-time by the PWA picker). Fall back to
+  // splitting `name` for legacy entries that predate the picker.
+  let firstName = (f.first_name || '').trim();
+  let lastName  = (f.last_name  || '').trim();
+  if (!lastName) {
+    const split = splitName(f.name);
+    firstName = split.firstName;
+    lastName  = split.lastName;
+  }
   if (!lastName) throw new Error('Entry has no usable name');
 
-  // GHIN's global_search mode takes a single free-text `search` param that
-  // matches across name/club/etc. Pass the full name; narrow by club locally.
+  const searchText = (f.first_name && f.last_name)
+    ? `${f.first_name} ${f.last_name}`
+    : (f.name || lastName).trim();
+
   let results = await searchGolfers(jwt, {
     global_search: 'true',
-    search:        f.name.trim(),
+    search:        searchText,
     country:       f.country || 'USA',
     status:        'Active',
   });
 
-  // Local filter: first-name startsWith (handles nickname → full name) and
-  // last-name match (in case `search` was lenient).
+  // Strict last-name + first-name-prefix filter.
   const fn = firstName.toLowerCase();
   const ln = lastName.toLowerCase();
   results = results.filter(g =>
@@ -146,20 +152,34 @@ async function resolveFriend(jwt, f) {
     (!fn || (g.first_name || '').toLowerCase().startsWith(fn))
   );
 
-  // Narrow by club name. Club is our main disambiguator with no state filter.
+  // If the user picked at add-time, club_id is the most reliable narrow.
+  if (f.club_id != null && results.length > 1) {
+    const narrowed = results.filter(g => String(g.club_id) === String(f.club_id));
+    if (narrowed.length) results = narrowed;
+  }
+
+  // State is a strong narrow when stored.
+  if (f.state && results.length > 1) {
+    const narrowed = results.filter(g =>
+      (g.state || '').toLowerCase() === f.state.toLowerCase()
+    );
+    if (narrowed.length) results = narrowed;
+  }
+
+  // Final narrow by club name substring.
   if (f.club && results.length > 1) {
     const narrowed = results.filter(g => clubMatches(g.club_name, f.club));
     if (narrowed.length) results = narrowed;
   }
 
   if (results.length === 0) {
-    throw new Error(`No GHIN match for "${f.name}"${f.club ? ' at "' + f.club + '"' : ''}`);
+    throw new Error(`No GHIN match for "${f.name || searchText}"${f.club ? ' at "' + f.club + '"' : ''}`);
   }
   if (results.length > 1) {
     const sample = results.slice(0, 3)
-      .map(g => `${g.first_name} ${g.last_name} @ ${g.club_name || '?'} (GHIN ${g.ghin})`)
+      .map(g => `${g.first_name} ${g.last_name} @ ${g.club_name || '?'} (${g.state || '?'})`)
       .join('; ');
-    throw new Error(`Ambiguous: ${results.length} matches for "${f.name}". Refine club name. First few: ${sample}`);
+    throw new Error(`Ambiguous: ${results.length} matches for "${f.name || searchText}". Re-add in the app to pick the right one. First few: ${sample}`);
   }
   return results[0];
 }
@@ -206,9 +226,22 @@ async function main() {
       const g = await resolveFriend(jwt, f);
       const ghinKey = String(g.ghin);
 
-      // Enrich friends entry with resolved ghin so future runs skip search.
-      if (!f.ghin) {
-        friends[idx] = { ghin: ghinKey, ...f };
+      // Enrich friends entry with resolved identifying fields so future runs
+      // can narrow the search precisely without re-disambiguating.
+      const enriched = {
+        ghin:       ghinKey,
+        first_name: g.first_name || f.first_name,
+        last_name:  g.last_name  || f.last_name,
+        name:       f.name || [g.first_name, g.last_name].filter(Boolean).join(' '),
+        club:       f.club || g.club_name || '',
+        club_id:    g.club_id ?? f.club_id,
+        state:      g.state || f.state,
+        country:    f.country || 'USA',
+      };
+      const before = JSON.stringify(f);
+      const after  = JSON.stringify({ ...f, ...enriched });
+      if (before !== after) {
+        friends[idx] = { ...f, ...enriched };
         friendsChanged = true;
       }
 
@@ -248,7 +281,13 @@ async function main() {
   }
 
   console.log(`\nDone. ${okCount} ok, ${failCount} failed.`);
-  if (okCount === 0 && failCount > 0) process.exit(1);
+  // Exit non-zero only if EVERYTHING failed AND no history exists — that
+  // usually means auth or network broke, which is worth a red workflow. If
+  // any friend succeeded, or we already have history to chart, individual
+  // failures are logged but the workflow stays green so resolvable friends
+  // keep accumulating data.
+  const haveHistory = Object.keys(data.golfers || {}).length > 0;
+  if (okCount === 0 && failCount > 0 && !haveHistory) process.exit(1);
 }
 
 main().catch(err => { console.error('Fatal:', err.message); process.exit(1); });

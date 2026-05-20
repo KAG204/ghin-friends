@@ -150,6 +150,22 @@
   .modal-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .modal-actions button { flex: 1; min-width: 0; }
 
+  .candidates {
+    margin-top: 8px; max-height: 50vh; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 6px;
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px; background: var(--panel-2);
+  }
+  .candidate {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+  }
+  .candidate:active { filter: brightness(0.97); }
+  .candidate.selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(26,77,46,0.18); }
+  .candidate .cand-name { font-weight: 600; font-size: 15px; }
+  .candidate .cand-meta { color: var(--muted); font-size: 12px; line-height: 1.4; }
+  .candidate .cand-ghin { color: var(--muted); font-size: 11px; font-family: ui-monospace, Menlo, monospace; }
+  .candidates-empty { text-align: center; color: var(--muted); font-size: 13px; padding: 16px; }
+
   .hidden { display: none !important; }
 </style>
 </head>
@@ -189,13 +205,19 @@
 
     <!-- Setup view -->
     <div id="setupView" class="hidden">
-      <h2>Connect to GitHub</h2>
-      <p>To add friends from this app, paste a GitHub <strong>fine-grained Personal Access Token</strong> below. The token is stored on this device only and is scoped to <code>KAG204/ghin-friends</code> — it can update <code>friends.json</code> and trigger your daily snapshot, nothing else.</p>
+      <h2>Connect</h2>
+      <p>This app needs two credentials, both stored only on this device:</p>
+      <ul>
+        <li>A <strong>GitHub token</strong> — lets the app update <code>friends.json</code> and trigger the daily snapshot.</li>
+        <li>Your <strong>GHIN email + password</strong> — lets the app search GHIN when you add a new friend, so you can pick the right person from the list.</li>
+      </ul>
+
+      <p style="margin-top: 16px;"><strong>GitHub fine-grained Personal Access Token:</strong></p>
       <ol>
         <li>Tap the link below to open GitHub's token page.</li>
-        <li>Token name: <code>ghin-friends app</code>. Expiration: pick whatever you want.</li>
-        <li>"Repository access" → <strong>Only select repositories</strong> → choose <code>ghin-friends</code>.</li>
-        <li>"Repository permissions": set <strong>Contents</strong> = Read and write, <strong>Actions</strong> = Read and write. (Metadata: Read is auto-included.)</li>
+        <li>Token name: <code>ghin-friends app</code>. Expiration: whatever you want.</li>
+        <li>"Repository access" → <strong>Only select repositories</strong> → <code>ghin-friends</code>.</li>
+        <li>"Repository permissions": <strong>Contents</strong> = Read and write, <strong>Actions</strong> = Read and write.</li>
         <li>Generate, copy the token (starts with <code>github_pat_</code>), and paste below.</li>
       </ol>
       <p><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Open GitHub token page →</a></p>
@@ -203,9 +225,21 @@
         <label for="patInput">Personal access token</label>
         <input id="patInput" type="password" placeholder="github_pat_..." autocomplete="off" spellcheck="false">
       </div>
+
+      <p style="margin-top: 16px;"><strong>GHIN credentials:</strong></p>
+      <p class="muted">Same email + password you use to log into the GHIN mobile app.</p>
+      <div class="field">
+        <label for="ghinUserInput">GHIN email (or GHIN #)</label>
+        <input id="ghinUserInput" type="email" placeholder="you@example.com" autocomplete="username" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="ghinPassInput">GHIN password</label>
+        <input id="ghinPassInput" type="password" placeholder="••••••••" autocomplete="current-password" spellcheck="false">
+      </div>
+
       <div id="setupMsg" class="muted"></div>
       <div class="modal-actions">
-        <button id="savePat">Save token</button>
+        <button id="savePat">Save &amp; verify</button>
         <button class="secondary" id="setupCancel">Cancel</button>
       </div>
     </div>
@@ -213,7 +247,7 @@
     <!-- Add friend view -->
     <div id="addView" class="hidden">
       <h2>Add a friend</h2>
-      <p class="muted">Type their full name and country club. The daily snapshot looks them up in GHIN automatically.</p>
+      <p class="muted">Type their full name and country club, then tap Search. Pick the right person from the GHIN results.</p>
       <form id="addForm">
         <div class="field">
           <label for="fName">Full name</label>
@@ -223,14 +257,28 @@
           <label for="fClub">Country club / home club</label>
           <input id="fClub" name="club" autocapitalize="words" autocomplete="off" placeholder="Governors Club" required>
         </div>
-        <div id="addMsg" class="muted"></div>
         <div class="modal-actions">
-          <button type="submit" id="addSave">Add</button>
-          <button type="button" class="secondary" id="addAndRun">Add &amp; run now</button>
+          <button type="submit" id="searchBtn">Search GHIN</button>
         </div>
       </form>
+
+      <!-- Candidate picker (hidden until search completes) -->
+      <div id="candidateSection" class="hidden" style="margin-top: 14px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px;">
+          <div id="candidateCount" class="muted"></div>
+          <button class="ghost" id="backToSearch">← Refine search</button>
+        </div>
+        <div id="candidateList" class="candidates"></div>
+        <div class="modal-actions" id="confirmActions" style="display: none;">
+          <button id="confirmAdd">Add this golfer</button>
+          <button class="secondary" id="confirmAddAndRun">Add &amp; run now</button>
+        </div>
+      </div>
+
+      <div id="addMsg" class="muted" style="margin-top: 8px;"></div>
+
       <div style="margin-top: 16px; text-align: center;">
-        <button class="ghost" id="changeToken">Change GitHub token</button>
+        <button class="ghost" id="changeToken">Change credentials</button>
       </div>
     </div>
 
@@ -259,12 +307,36 @@
   const GITHUB_REPO    = 'KAG204/ghin-friends';
   const WORKFLOW_ID    = 'snapshot.yml';
   const TOKEN_KEY      = 'ghinFriendsPAT';
+  const GHIN_CREDS_KEY = 'ghinCreds';
   const DATA_CACHE     = 'ghinDataCache';
   const FRIENDS_CACHE  = 'ghinFriendsCache';
   const MONTHS         = 12;
   const PALETTE = [
     '#1a4d2e', '#b91c1c', '#1d4ed8', '#a855f7',
     '#ea580c', '#0891b2', '#ca8a04', '#db2777',
+  ];
+
+  // GHIN auth constants — mirror scripts/snapshot.mjs (keep in sync).
+  const GHIN_FIREBASE_URL =
+    'https://firebaseinstallations.googleapis.com/v1/projects/ghin-mobile-app/installations';
+  const GHIN_GOOGLE_API_KEY = 'AIzaSyBxgTOAWxiud0HuaE5tN-5NTlzFnrtyz-I';
+  const GHIN_FIREBASE_BODY = {
+    appId: '1:884417644529:web:47fb315bc6c70242f72650',
+    authVersion: 'FIS_v2',
+    fid: 'fg6JfS0U01YmrelthLX9Iz',
+    sdkVersion: 'w:0.5.7',
+  };
+  const GHIN_API_BASE   = 'https://api2.ghin.com/api/v1';
+  const GHIN_LOGIN_URL  = `${GHIN_API_BASE}/golfer_login.json`;
+  const GHIN_GOLFERS_URL = `${GHIN_API_BASE}/golfers.json`;
+  const GHIN_CLIENT_SOURCE = 'GHINcom';
+  // If GHIN search stops working from the app, public CORS proxies sometimes
+  // disappear or stop forwarding custom headers. Edit this list (move the
+  // working one to the top, drop dead ones) — first non-error response wins.
+  const GHIN_PROXIES = [
+    (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    (u) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
+    (u) => `https://thingproxy.freeboard.io/fetch/${u}`,
   ];
 
   // =========================================================================
@@ -285,20 +357,28 @@
   const $closeModal  = $('closeModal');
 
   // setup
-  const $setupView   = $('setupView');
-  const $patInput    = $('patInput');
-  const $savePat     = $('savePat');
-  const $setupCancel = $('setupCancel');
-  const $setupMsg    = $('setupMsg');
+  const $setupView      = $('setupView');
+  const $patInput       = $('patInput');
+  const $ghinUserInput  = $('ghinUserInput');
+  const $ghinPassInput  = $('ghinPassInput');
+  const $savePat        = $('savePat');
+  const $setupCancel    = $('setupCancel');
+  const $setupMsg       = $('setupMsg');
   // add
-  const $addView    = $('addView');
-  const $addForm    = $('addForm');
-  const $fName      = $('fName');
-  const $fClub      = $('fClub');
-  const $addSave    = $('addSave');
-  const $addAndRun  = $('addAndRun');
-  const $addMsg     = $('addMsg');
-  const $changeToken = $('changeToken');
+  const $addView           = $('addView');
+  const $addForm           = $('addForm');
+  const $fName             = $('fName');
+  const $fClub             = $('fClub');
+  const $searchBtn         = $('searchBtn');
+  const $candidateSection  = $('candidateSection');
+  const $candidateCount    = $('candidateCount');
+  const $candidateList     = $('candidateList');
+  const $confirmActions    = $('confirmActions');
+  const $confirmAdd        = $('confirmAdd');
+  const $confirmAddAndRun  = $('confirmAddAndRun');
+  const $backToSearch      = $('backToSearch');
+  const $addMsg            = $('addMsg');
+  const $changeToken       = $('changeToken');
   // remove
   const $removeView    = $('removeView');
   const $removeText    = $('removeText');
@@ -314,6 +394,7 @@
   let chart;
   let editMode = false;
   let pendingRemove = null; // friend object pending removal
+  let selectedCandidate = null; // GHIN record the user tapped in the picker
 
   // =========================================================================
   // PAT helpers
@@ -389,15 +470,14 @@
         && (a?.club || '').toLowerCase() === (b?.club || '').toLowerCase();
   }
 
-  async function apiAddFriend({ name, club }) {
+  async function apiAddFriend(entry) {
     const { sha, json } = await ghGetFile('friends.json');
-    const candidate = { name, club };
-    if (json.find(f => friendMatches(f, candidate))) {
-      throw new Error('Already tracking someone with this name + club.');
+    if (json.find(f => friendMatches(f, entry))) {
+      throw new Error('Already tracking this person.');
     }
-    json.push(candidate);
-    await ghPutFile('friends.json', json, sha, `Add ${name}`);
-    return candidate;
+    json.push(entry);
+    await ghPutFile('friends.json', json, sha, `Add ${entry.name}`);
+    return entry;
   }
 
   async function apiRemoveFriend(friend) {
@@ -406,6 +486,128 @@
     if (idx < 0) throw new Error('Not found in friends.json (already removed?).');
     const removed = json.splice(idx, 1)[0];
     await ghPutFile('friends.json', json, sha, `Remove ${removed.name || 'friend'}`);
+  }
+
+  // =========================================================================
+  // GHIN credentials + in-app search
+  // =========================================================================
+  function getGhinCreds() {
+    try {
+      const raw = localStorage.getItem(GHIN_CREDS_KEY);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      return (obj && obj.user && obj.password) ? obj : null;
+    } catch { return null; }
+  }
+  function setGhinCreds(obj) {
+    if (obj && obj.user && obj.password) {
+      localStorage.setItem(GHIN_CREDS_KEY, JSON.stringify(obj));
+    } else {
+      localStorage.removeItem(GHIN_CREDS_KEY);
+    }
+  }
+
+  let ghinJwtCache = null;
+
+  // Run `fn(proxyWrap)` against each proxy until one returns successfully.
+  async function ghinTryProxies(fn) {
+    let lastErr;
+    for (const wrap of GHIN_PROXIES) {
+      try {
+        return await fn(wrap);
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('All CORS proxies failed');
+  }
+
+  async function ghinPostJson(url, body, extraHeaders = {}) {
+    return ghinTryProxies(async (wrap) => {
+      const res = await fetch(wrap(url), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...extraHeaders },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`GHIN ${res.status}: ${text.slice(0, 160)}`);
+      }
+      return res.json();
+    });
+  }
+
+  async function ghinGetJson(url, jwt) {
+    return ghinTryProxies(async (wrap) => {
+      const res = await fetch(wrap(url), {
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${jwt}`,
+          'source': GHIN_CLIENT_SOURCE,
+        },
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`GHIN ${res.status}: ${text.slice(0, 160)}`);
+      }
+      return res.json();
+    });
+  }
+
+  async function ghinAuthenticate() {
+    if (ghinJwtCache) return ghinJwtCache;
+    const creds = getGhinCreds();
+    if (!creds) throw new Error('Missing GHIN credentials. Re-open setup.');
+
+    const fbRes = await ghinPostJson(GHIN_FIREBASE_URL, GHIN_FIREBASE_BODY, {
+      'x-goog-api-key': GHIN_GOOGLE_API_KEY,
+    });
+    const firebaseToken = fbRes?.authToken?.token;
+    if (!firebaseToken) throw new Error('Firebase did not return an auth token.');
+
+    const loginRes = await ghinPostJson(GHIN_LOGIN_URL, {
+      token: firebaseToken,
+      user: { email_or_ghin: creds.user, password: creds.password },
+    });
+    const jwt = loginRes?.golfer_user?.golfer_user_token;
+    if (!jwt) throw new Error('GHIN login failed — check email/password.');
+    ghinJwtCache = jwt;
+    return jwt;
+  }
+
+  async function ghinSearch(name, club) {
+    const jwt = await ghinAuthenticate();
+    const params = new URLSearchParams({
+      global_search: 'true',
+      search:        name.trim(),
+      country:       'USA',
+      status:        'Active',
+      per_page:      '100',
+      page:          '1',
+    });
+    const json = await ghinGetJson(`${GHIN_GOLFERS_URL}?${params.toString()}`, jwt);
+    const results = Array.isArray(json?.golfers) ? json.golfers : [];
+
+    // Mirror snapshot.mjs filtering: strict last-name match, optional first-name prefix.
+    const parts = name.trim().split(/\s+/);
+    const firstName = parts.length > 1 ? parts[0].toLowerCase() : '';
+    const lastName  = (parts.length > 1 ? parts.slice(1).join(' ') : parts[0]).toLowerCase();
+    let filtered = results.filter(g =>
+      (g.last_name || '').toLowerCase() === lastName &&
+      (!firstName || (g.first_name || '').toLowerCase().startsWith(firstName))
+    );
+
+    // Sort: club substring matches first, then alphabetical by state then club.
+    const clubQ = (club || '').toLowerCase().trim();
+    filtered.sort((a, b) => {
+      const am = clubQ && (a.club_name || '').toLowerCase().includes(clubQ) ? 0 : 1;
+      const bm = clubQ && (b.club_name || '').toLowerCase().includes(clubQ) ? 0 : 1;
+      if (am !== bm) return am - bm;
+      const as = (a.state || '') + (a.club_name || '');
+      const bs = (b.state || '') + (b.club_name || '');
+      return as.localeCompare(bs);
+    });
+    return filtered;
   }
 
   // =========================================================================
@@ -621,12 +823,19 @@
   function closeModalFn()  { $modal.classList.remove('open'); $setupMsg.textContent=''; $addMsg.textContent=''; $removeMsg.textContent=''; }
 
   function openAddOrSetup() {
-    if (!getPat()) { $patInput.value = ''; openModal('setup'); }
-    else {
-      $fName.value=''; $fClub.value=''; $addMsg.textContent='';
-      openModal('add');
-      setTimeout(()=>$fName.focus(), 50);
+    if (!getPat() || !getGhinCreds()) {
+      const creds = getGhinCreds();
+      $patInput.value     = getPat() || '';
+      $ghinUserInput.value = creds?.user || '';
+      $ghinPassInput.value = creds?.password || '';
+      $setupMsg.textContent = '';
+      openModal('setup');
+      return;
     }
+    $fName.value=''; $fClub.value=''; $addMsg.textContent='';
+    resetAddView();
+    openModal('add');
+    setTimeout(()=>$fName.focus(), 50);
   }
 
   function openRemove(friend) {
@@ -646,7 +855,14 @@
   $modal.addEventListener('click', (e) => { if (e.target === $modal) closeModalFn(); });
   $setupCancel.addEventListener('click', closeModalFn);
   $removeCancel.addEventListener('click', closeModalFn);
-  $changeToken.addEventListener('click', () => { $patInput.value = ''; openModal('setup'); });
+  $changeToken.addEventListener('click', () => {
+    const creds = getGhinCreds();
+    $patInput.value      = getPat() || '';
+    $ghinUserInput.value = creds?.user || '';
+    $ghinPassInput.value = creds?.password || '';
+    $setupMsg.textContent = '';
+    openModal('setup');
+  });
 
   $editToggle.addEventListener('click', () => {
     editMode = !editMode;
@@ -655,37 +871,128 @@
   });
 
   $savePat.addEventListener('click', async () => {
-    const v = $patInput.value.trim();
-    if (!v) { $setupMsg.textContent = 'Paste a token first.'; return; }
-    $setupMsg.innerHTML = '<span class="spinner"></span> Verifying…';
+    const pat  = $patInput.value.trim();
+    const user = $ghinUserInput.value.trim();
+    const pass = $ghinPassInput.value;
+    if (!pat)  { $setupMsg.textContent = 'Paste a GitHub token first.'; return; }
+    if (!user) { $setupMsg.textContent = 'Enter your GHIN email or GHIN #.'; return; }
+    if (!pass) { $setupMsg.textContent = 'Enter your GHIN password.'; return; }
+
+    $setupMsg.innerHTML = '<span class="spinner"></span> Verifying GitHub token…';
     $savePat.disabled = true;
     try {
-      setPat(v);
+      setPat(pat);
       await ghValidate();
+
+      $setupMsg.innerHTML = '<span class="spinner"></span> Verifying GHIN login…';
+      setGhinCreds({ user, password: pass });
+      ghinJwtCache = null;
+      await ghinAuthenticate();
+
       $setupMsg.textContent = '';
       closeModalFn();
-      showBanner('ok', 'GitHub token saved. You can add friends now.', 3000);
+      showBanner('ok', 'Connected. You can add friends now.', 3000);
       openAddOrSetup();
     } catch (err) {
-      setPat('');
+      // Leave PAT in place if GHIN check failed (don't make user re-paste it)
+      // but clear GHIN creds since they're the likely failure point.
+      if (/GHIN/.test(err.message)) setGhinCreds(null);
       $setupMsg.textContent = `Failed: ${err.message}`;
     } finally {
       $savePat.disabled = false;
     }
   });
 
-  async function submitAdd(triggerAfter) {
+  function resetAddView() {
+    selectedCandidate = null;
+    $candidateSection.classList.add('hidden');
+    $candidateList.innerHTML = '';
+    $candidateCount.textContent = '';
+    $confirmActions.style.display = 'none';
+    $searchBtn.disabled = false;
+    $searchBtn.textContent = 'Search GHIN';
+    $addMsg.textContent = '';
+  }
+
+  function renderCandidates(list, club) {
+    $candidateList.innerHTML = '';
+    if (list.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'candidates-empty';
+      empty.textContent = 'No matches. Try a different spelling, or check the club name.';
+      $candidateList.appendChild(empty);
+      return;
+    }
+    list.forEach((g) => {
+      const card = document.createElement('div');
+      card.className = 'candidate';
+      const fullName = [g.first_name, g.last_name].filter(Boolean).join(' ') || '(unnamed)';
+      const meta     = [g.club_name, g.state].filter(Boolean).join(' · ');
+      card.innerHTML = `
+        <div class="cand-name">${fullName}</div>
+        <div class="cand-meta">${meta || '(no club listed)'}</div>
+        <div class="cand-ghin">GHIN ${g.ghin || '—'}</div>`;
+      card.addEventListener('click', () => {
+        selectedCandidate = g;
+        for (const c of $candidateList.children) c.classList.remove('selected');
+        card.classList.add('selected');
+        $confirmActions.style.display = 'flex';
+      });
+      $candidateList.appendChild(card);
+    });
+  }
+
+  async function runSearch() {
     const name = $fName.value.trim();
     const club = $fClub.value.trim();
     if (!name || !club) {
       $addMsg.textContent = 'Name and club are both required.';
       return;
     }
-    $addSave.disabled = true; $addAndRun.disabled = true;
+    selectedCandidate = null;
+    $confirmActions.style.display = 'none';
+    $addMsg.textContent = '';
+    $searchBtn.disabled = true;
+    $searchBtn.innerHTML = '<span class="spinner"></span> Searching…';
+    try {
+      const results = await ghinSearch(name, club);
+      $candidateSection.classList.remove('hidden');
+      $candidateCount.textContent = results.length === 1
+        ? '1 match'
+        : `${results.length} matches — tap one to select`;
+      renderCandidates(results, club);
+    } catch (err) {
+      $addMsg.textContent = `Search failed: ${err.message}`;
+    } finally {
+      $searchBtn.disabled = false;
+      $searchBtn.textContent = 'Search GHIN';
+    }
+  }
+
+  async function confirmCandidate(triggerAfter) {
+    if (!selectedCandidate) {
+      $addMsg.textContent = 'Tap a golfer above to select them.';
+      return;
+    }
+    const g = selectedCandidate;
+    const fullName = [g.first_name, g.last_name].filter(Boolean).join(' ').trim() || $fName.value.trim();
+    const entry = {
+      ghin:       g.ghin ? String(g.ghin) : undefined,
+      first_name: g.first_name || undefined,
+      last_name:  g.last_name  || undefined,
+      name:       fullName,
+      club:       g.club_name || $fClub.value.trim(),
+      club_id:    g.club_id != null ? g.club_id : undefined,
+      state:      g.state || undefined,
+      country:    g.country || 'USA',
+    };
+    // Strip undefined fields so the file stays clean.
+    for (const k of Object.keys(entry)) if (entry[k] === undefined) delete entry[k];
+
+    $confirmAdd.disabled = true; $confirmAddAndRun.disabled = true;
     $addMsg.innerHTML = '<span class="spinner"></span> Saving…';
     try {
-      const added = await apiAddFriend({ name, club });
-      // Optimistic local update
+      const added = await apiAddFriend(entry);
       friends.push(added);
       renderFriends(); renderChart();
       if (triggerAfter) {
@@ -695,18 +1002,27 @@
       closeModalFn();
       showBanner('ok',
         triggerAfter
-          ? `Added ${name}. Snapshot running — refresh in ~30 sec.`
-          : `Added ${name}. Will appear on next daily run.`,
+          ? `Added ${fullName}. Snapshot running — refresh in ~30 sec.`
+          : `Added ${fullName}. Will appear on next daily run.`,
         5000);
     } catch (err) {
       $addMsg.textContent = `Failed: ${err.message}`;
     } finally {
-      $addSave.disabled = false; $addAndRun.disabled = false;
+      $confirmAdd.disabled = false; $confirmAddAndRun.disabled = false;
     }
   }
 
-  $addForm.addEventListener('submit', (e) => { e.preventDefault(); submitAdd(false); });
-  $addAndRun.addEventListener('click', () => submitAdd(true));
+  $addForm.addEventListener('submit', (e) => { e.preventDefault(); runSearch(); });
+  $backToSearch.addEventListener('click', () => {
+    selectedCandidate = null;
+    $candidateSection.classList.add('hidden');
+    $candidateList.innerHTML = '';
+    $confirmActions.style.display = 'none';
+    $addMsg.textContent = '';
+    setTimeout(() => $fName.focus(), 50);
+  });
+  $confirmAdd.addEventListener('click', () => confirmCandidate(false));
+  $confirmAddAndRun.addEventListener('click', () => confirmCandidate(true));
 
   $removeConfirm.addEventListener('click', async () => {
     if (!pendingRemove) return;
