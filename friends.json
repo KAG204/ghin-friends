@@ -41,5 +41,14 @@
     "club_id": 54815,
     "state": "TN",
     "country": "USA"
+  },
+  {
+    "first_name": "Jared",
+    "last_name": "Elster",
+    "name": "Jared Elster",
+    "club": "The Legacy Club",
+    "club_id": 22511,
+    "state": "NJ",
+    "country": "United States"
   }
 ]
