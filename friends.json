@@ -2,22 +2,49 @@
   {
     "name": "Adam Winston",
     "state": "TN",
-    "club": "Brentwood Country Club"
+    "club": "Brentwood Country Club",
+    "ghin": "1*****1",
+    "first_name": "Adam",
+    "last_name": "Winston",
+    "club_id": 17914,
+    "country": "USA"
   },
   {
     "name": "Ed Guaraldi",
-    "club": "Vesper Country Club"
+    "club": "Vesper Country Club",
+    "ghin": "2*****2",
+    "first_name": "Ed",
+    "last_name": "Guaraldi",
+    "club_id": 13290,
+    "state": "MA",
+    "country": "USA"
   },
   {
     "name": "Jon Liening",
-    "club": "Governors Club"
+    "club": "Governors Club",
+    "ghin": "1*****8",
+    "first_name": "Jon",
+    "last_name": "Liening",
+    "club_id": 18103,
+    "country": "USA"
   },
   {
     "name": "Matthew Schott",
-    "club": "Galloway National Golf Club"
+    "club": "Galloway National Golf Club",
+    "ghin": "5*****4",
+    "first_name": "Matthew",
+    "last_name": "Schott",
+    "club_id": 22363,
+    "country": "USA"
   },
   {
     "name": "Joe Campbell",
-    "club": "USGA/Tennessee GC"
+    "club": "USGA/Tennessee GC",
+    "ghin": "1*****9",
+    "first_name": "Joe",
+    "last_name": "Campbell",
+    "club_id": 54815,
+    "state": "TN",
+    "country": "USA"
   }
 ]
