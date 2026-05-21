@@ -141,11 +141,12 @@
 
   .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
   .field label { font-size: 12px; color: var(--muted); }
-  .field input {
+  .field input, .field select {
     padding: 12px; border: 1px solid var(--border); border-radius: 8px;
     font-size: 16px; outline: none; min-height: 44px; background: var(--panel);
+    font-family: inherit; color: var(--text);
   }
-  .field input:focus { border-color: var(--accent); }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
 
   .modal-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .modal-actions button { flex: 1; min-width: 0; }
@@ -247,15 +248,34 @@
     <!-- Add friend view -->
     <div id="addView" class="hidden">
       <h2>Add a friend</h2>
-      <p class="muted">Type their full name and country club, then tap Search. Pick the right person from the GHIN results.</p>
+      <p class="muted">Fill in any combination of name, state, or club, then tap Search. Pick the right person from the GHIN results.</p>
       <form id="addForm">
         <div class="field">
-          <label for="fName">Full name</label>
-          <input id="fName" name="name" autocapitalize="words" autocomplete="off" placeholder="Jane Smith" required>
+          <label for="fName">Full name (optional)</label>
+          <input id="fName" name="name" autocapitalize="words" autocomplete="off" placeholder="Jane Smith">
         </div>
         <div class="field">
-          <label for="fClub">Country club / home club</label>
-          <input id="fClub" name="club" autocapitalize="words" autocomplete="off" placeholder="Governors Club" required>
+          <label for="fState">State (optional)</label>
+          <select id="fState" name="state">
+            <option value="">— any state —</option>
+            <option>AL</option><option>AK</option><option>AZ</option><option>AR</option>
+            <option>CA</option><option>CO</option><option>CT</option><option>DE</option>
+            <option>FL</option><option>GA</option><option>HI</option><option>ID</option>
+            <option>IL</option><option>IN</option><option>IA</option><option>KS</option>
+            <option>KY</option><option>LA</option><option>ME</option><option>MD</option>
+            <option>MA</option><option>MI</option><option>MN</option><option>MS</option>
+            <option>MO</option><option>MT</option><option>NE</option><option>NV</option>
+            <option>NH</option><option>NJ</option><option>NM</option><option>NY</option>
+            <option>NC</option><option>ND</option><option>OH</option><option>OK</option>
+            <option>OR</option><option>PA</option><option>RI</option><option>SC</option>
+            <option>SD</option><option>TN</option><option>TX</option><option>UT</option>
+            <option>VT</option><option>VA</option><option>WA</option><option>WV</option>
+            <option>WI</option><option>WY</option><option>DC</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="fClub">Country club / home club (optional)</label>
+          <input id="fClub" name="club" autocapitalize="words" autocomplete="off" placeholder="Governors Club">
         </div>
         <div class="modal-actions">
           <button type="submit" id="searchBtn">Search GHIN</button>
@@ -368,6 +388,7 @@
   const $addView           = $('addView');
   const $addForm           = $('addForm');
   const $fName             = $('fName');
+  const $fState            = $('fState');
   const $fClub             = $('fClub');
   const $searchBtn         = $('searchBtn');
   const $candidateSection  = $('candidateSection');
@@ -462,10 +483,21 @@
     });
   }
 
+  // Stable composite key — must match scripts/snapshot.mjs:golferKey().
+  function golferKey(g) {
+    const ln  = (g?.last_name  || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const fn  = (g?.first_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cid = g?.club_id != null && g?.club_id !== '' ? String(g.club_id) : 'noclub';
+    return `${ln}-${fn}-${cid}`;
+  }
+
   function friendMatches(a, b) {
-    // Two friend entries refer to the same person if their GHIN matches,
-    // or (when GHIN isn't known yet) their name + club pair matches.
-    if (a?.ghin && b?.ghin) return String(a.ghin) === String(b.ghin);
+    // Two friend entries refer to the same person if their composite identity
+    // (last name + first name + club_id) matches. Fall back to name+club for
+    // legacy entries that don't have first_name/last_name/club_id yet.
+    if (a?.last_name && b?.last_name && a?.club_id != null && b?.club_id != null) {
+      return golferKey(a) === golferKey(b);
+    }
     return (a?.name || '').toLowerCase() === (b?.name || '').toLowerCase()
         && (a?.club || '').toLowerCase() === (b?.club || '').toLowerCase();
   }
@@ -575,39 +607,62 @@
     return jwt;
   }
 
-  async function ghinSearch(name, club) {
+  async function ghinSearch({ name, state, club }) {
     const jwt = await ghinAuthenticate();
     const params = new URLSearchParams({
-      global_search: 'true',
-      search:        name.trim(),
-      country:       'USA',
-      status:        'Active',
-      per_page:      '100',
-      page:          '1',
+      country:  'USA',
+      status:   'Active',
+      per_page: '100',
+      page:     '1',
     });
+    const nameTrim  = (name  || '').trim();
+    const stateTrim = (state || '').trim().toUpperCase();
+    const clubTrim  = (club  || '').trim();
+
+    if (nameTrim) {
+      params.set('global_search', 'true');
+      params.set('search', nameTrim);
+    }
+    if (stateTrim) params.set('state', stateTrim);
+
     const json = await ghinGetJson(`${GHIN_GOLFERS_URL}?${params.toString()}`, jwt);
-    const results = Array.isArray(json?.golfers) ? json.golfers : [];
+    let results = Array.isArray(json?.golfers) ? json.golfers : [];
 
-    // Mirror snapshot.mjs filtering: strict last-name match, optional first-name prefix.
-    const parts = name.trim().split(/\s+/);
-    const firstName = parts.length > 1 ? parts[0].toLowerCase() : '';
-    const lastName  = (parts.length > 1 ? parts.slice(1).join(' ') : parts[0]).toLowerCase();
-    let filtered = results.filter(g =>
-      (g.last_name || '').toLowerCase() === lastName &&
-      (!firstName || (g.first_name || '').toLowerCase().startsWith(firstName))
-    );
+    // Local name filtering (strict last-name, prefix first-name) — only when
+    // a name was provided. With state-only or club-only searches we let the
+    // user scan the full list.
+    if (nameTrim) {
+      const parts = nameTrim.split(/\s+/);
+      const firstName = parts.length > 1 ? parts[0].toLowerCase() : '';
+      const lastName  = (parts.length > 1 ? parts.slice(1).join(' ') : parts[0]).toLowerCase();
+      results = results.filter(g =>
+        (g.last_name || '').toLowerCase() === lastName &&
+        (!firstName || (g.first_name || '').toLowerCase().startsWith(firstName))
+      );
+    }
 
-    // Sort: club substring matches first, then alphabetical by state then club.
-    const clubQ = (club || '').toLowerCase().trim();
-    filtered.sort((a, b) => {
-      const am = clubQ && (a.club_name || '').toLowerCase().includes(clubQ) ? 0 : 1;
-      const bm = clubQ && (b.club_name || '').toLowerCase().includes(clubQ) ? 0 : 1;
-      if (am !== bm) return am - bm;
-      const as = (a.state || '') + (a.club_name || '');
-      const bs = (b.state || '') + (b.club_name || '');
-      return as.localeCompare(bs);
+    // State filter — the API param above narrows server-side, but apply
+    // locally too in case the server ignored it.
+    if (stateTrim) {
+      results = results.filter(g => (g.state || '').toUpperCase() === stateTrim);
+    }
+
+    // Club is always a local filter (the API doesn't have a free-text club param).
+    if (clubTrim) {
+      const c = clubTrim.toLowerCase();
+      results = results.filter(g => (g.club_name || '').toLowerCase().includes(c));
+    }
+
+    // Sort: alphabetical by last/first; ties broken by state then club.
+    results.sort((a, b) => {
+      const an = `${a.last_name || ''} ${a.first_name || ''}`.toLowerCase();
+      const bn = `${b.last_name || ''} ${b.first_name || ''}`.toLowerCase();
+      if (an !== bn) return an.localeCompare(bn);
+      const am = `${a.state || ''} ${a.club_name || ''}`.toLowerCase();
+      const bm = `${b.state || ''} ${b.club_name || ''}`.toLowerCase();
+      return am.localeCompare(bm);
     });
-    return filtered;
+    return results;
   }
 
   // =========================================================================
@@ -686,7 +741,9 @@
     }
 
     friends.forEach((f, idx) => {
-      const g = (f.ghin && data.golfers) ? data.golfers[String(f.ghin)] : null;
+      const g = (data.golfers && f.last_name && f.club_id != null)
+        ? data.golfers[golferKey(f)]
+        : null;
       const rows = g?.rows || [];
       const dlt = trailingDelta(rows);
       const card = document.createElement('div');
@@ -712,7 +769,7 @@
       idxEl.className = 'index';
       idxEl.textContent = rows.length ? rows[rows.length-1].i.toFixed(1) : '—';
       const deltaEl = document.createElement('div');
-      if (!f.ghin && !rows.length) {
+      if ((!f.last_name || f.club_id == null) && !rows.length) {
         deltaEl.className = 'delta flat';
         deltaEl.textContent = 'pending';
       } else if (!dlt) {
@@ -832,7 +889,7 @@
       openModal('setup');
       return;
     }
-    $fName.value=''; $fClub.value=''; $addMsg.textContent='';
+    $fName.value=''; $fState.value=''; $fClub.value=''; $addMsg.textContent='';
     resetAddView();
     openModal('add');
     setTimeout(()=>$fName.focus(), 50);
@@ -930,8 +987,7 @@
       const meta     = [g.club_name, g.state].filter(Boolean).join(' · ');
       card.innerHTML = `
         <div class="cand-name">${fullName}</div>
-        <div class="cand-meta">${meta || '(no club listed)'}</div>
-        <div class="cand-ghin">GHIN ${g.ghin || '—'}</div>`;
+        <div class="cand-meta">${meta || '(no club listed)'}</div>`;
       card.addEventListener('click', () => {
         selectedCandidate = g;
         for (const c of $candidateList.children) c.classList.remove('selected');
@@ -943,10 +999,11 @@
   }
 
   async function runSearch() {
-    const name = $fName.value.trim();
-    const club = $fClub.value.trim();
-    if (!name || !club) {
-      $addMsg.textContent = 'Name and club are both required.';
+    const name  = $fName.value.trim();
+    const state = $fState.value.trim();
+    const club  = $fClub.value.trim();
+    if (!name && !state && !club) {
+      $addMsg.textContent = 'Enter at least one: name, state, or club.';
       return;
     }
     selectedCandidate = null;
@@ -955,11 +1012,15 @@
     $searchBtn.disabled = true;
     $searchBtn.innerHTML = '<span class="spinner"></span> Searching…';
     try {
-      const results = await ghinSearch(name, club);
+      const results = await ghinSearch({ name, state, club });
       $candidateSection.classList.remove('hidden');
-      $candidateCount.textContent = results.length === 1
-        ? '1 match'
-        : `${results.length} matches — tap one to select`;
+      if (results.length === 0) {
+        $candidateCount.textContent = '0 matches';
+      } else if (results.length === 1) {
+        $candidateCount.textContent = '1 match';
+      } else {
+        $candidateCount.textContent = `${results.length} matches — tap one to select`;
+      }
       renderCandidates(results, club);
     } catch (err) {
       $addMsg.textContent = `Search failed: ${err.message}`;
@@ -977,7 +1038,6 @@
     const g = selectedCandidate;
     const fullName = [g.first_name, g.last_name].filter(Boolean).join(' ').trim() || $fName.value.trim();
     const entry = {
-      ghin:       g.ghin ? String(g.ghin) : undefined,
       first_name: g.first_name || undefined,
       last_name:  g.last_name  || undefined,
       name:       fullName,

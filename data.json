@@ -1,8 +1,8 @@
 {
   "updatedAt": "2026-05-21T00:17:36.036Z",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "golfers": {
-    "1*****1": {
+    "winston-adam-17914": {
       "name": "Adam Winston",
       "club": "Brentwood Country Club",
       "rows": [
@@ -22,7 +22,7 @@
       "lastReportedLow12mo": 12.7,
       "lastReportedLowDate": "2025-08-28"
     },
-    "2*****2": {
+    "guaraldi-ed-13290": {
       "name": "Ed Guaraldi",
       "club": "Vesper Country Club",
       "rows": [
@@ -42,7 +42,7 @@
       "lastReportedLow12mo": 23.1,
       "lastReportedLowDate": "2025-06-04"
     },
-    "1*****8": {
+    "liening-jon-18103": {
       "name": "Jon Liening",
       "club": "Governors Club",
       "rows": [
@@ -62,7 +62,7 @@
       "lastReportedLow12mo": 12.7,
       "lastReportedLowDate": "2026-04-26"
     },
-    "5*****4": {
+    "schott-matthew-22363": {
       "name": "Matthew Schott",
       "club": "Galloway National Golf Club",
       "rows": [
@@ -82,7 +82,7 @@
       "lastReportedLow12mo": 12.9,
       "lastReportedLowDate": "2025-05-25"
     },
-    "1*****9": {
+    "campbell-joe-54815": {
       "name": "Joe Campbell",
       "club": "USGA/Tennessee GC",
       "rows": [

@@ -184,6 +184,17 @@ async function resolveFriend(jwt, f) {
   return results[0];
 }
 
+// ---- identity ---------------------------------------------------------------
+// Stable composite key for data.json. The GHIN API returns masked GHIN strings
+// (e.g. "1*****1") for other golfers — those are useless as lookup keys and
+// look ugly, so we key history on (last, first, club_id) instead.
+function golferKey(g) {
+  const ln  = (g.last_name  || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const fn  = (g.first_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cid = g.club_id != null && g.club_id !== '' ? String(g.club_id) : 'noclub';
+  return `${ln}-${fn}-${cid}`;
+}
+
 // ---- data merging -----------------------------------------------------------
 function upsertRow(rows, d, i) {
   const existing = rows.find(r => r.d === d);
@@ -224,12 +235,12 @@ async function main() {
     if (!f) continue;
     try {
       const g = await resolveFriend(jwt, f);
-      const ghinKey = String(g.ghin);
 
       // Enrich friends entry with resolved identifying fields so future runs
-      // can narrow the search precisely without re-disambiguating.
+      // can narrow the search precisely without re-disambiguating. We do NOT
+      // store the API's `ghin` field — it's a masked privacy string, not a
+      // real GHIN, and storing it just clutters the file with `*****` values.
       const enriched = {
-        ghin:       ghinKey,
         first_name: g.first_name || f.first_name,
         last_name:  g.last_name  || f.last_name,
         name:       f.name || [g.first_name, g.last_name].filter(Boolean).join(' '),
@@ -238,10 +249,10 @@ async function main() {
         state:      g.state || f.state,
         country:    f.country || 'USA',
       };
-      const before = JSON.stringify(f);
-      const after  = JSON.stringify({ ...f, ...enriched });
-      if (before !== after) {
-        friends[idx] = { ...f, ...enriched };
+      const merged = { ...f, ...enriched };
+      delete merged.ghin; // Strip any legacy masked-GHIN field.
+      if (JSON.stringify(f) !== JSON.stringify(merged)) {
+        friends[idx] = merged;
         friendsChanged = true;
       }
 
@@ -252,11 +263,18 @@ async function main() {
 
       if (hi === null) throw new Error('Response had no handicap_index');
 
-      const entry = (data.golfers[ghinKey] ??= { name: fullName, club: clubName, rows: [] });
+      const key = golferKey({
+        first_name: g.first_name || f.first_name,
+        last_name:  g.last_name  || f.last_name,
+        club_id:    g.club_id ?? f.club_id,
+      });
+
+      const entry = (data.golfers[key] ??= { name: fullName, club: clubName, rows: [] });
       entry.name = fullName;
       entry.club = clubName;
       if (lowHi !== null) entry.lastReportedLow12mo = lowHi;
       if (g.low_hi_date)  entry.lastReportedLowDate = g.low_hi_date;
+      delete entry.ghin; // Clean legacy entries that had this field.
 
       // First-sight backfill: seed GHIN's own low-handicap point on first run.
       if (entry.rows.length === 0 && lowHi !== null && g.low_hi_date) {
@@ -264,7 +282,7 @@ async function main() {
       }
 
       const added = upsertRow(entry.rows, TODAY_UTC, hi);
-      console.log(`${added ? '+' : '~'} ${ghinKey} (${fullName}): ${hi}`);
+      console.log(`${added ? '+' : '~'} ${key} (${fullName}): ${hi}`);
       okCount++;
     } catch (err) {
       console.error(`! ${f.name || '(unnamed)'}: ${err.message}`);
