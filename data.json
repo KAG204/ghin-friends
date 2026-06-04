@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-01T22:39:01.661Z",
+  "updatedAt": "2026-06-04T21:02:31.327Z",
   "schemaVersion": 2,
   "golfers": {
     "winston-adam-17914": {
@@ -60,6 +60,10 @@
         },
         {
           "d": "2026-06-01",
+          "i": 13.7
+        },
+        {
+          "d": "2026-06-04",
           "i": 13.7
         }
       ],
@@ -125,6 +129,10 @@
         {
           "d": "2026-06-01",
           "i": 24.4
+        },
+        {
+          "d": "2026-06-04",
+          "i": 24
         }
       ],
       "lastReportedLow12mo": 23.1,
@@ -189,10 +197,14 @@
         {
           "d": "2026-06-01",
           "i": 12.7
+        },
+        {
+          "d": "2026-06-04",
+          "i": 12.7
         }
       ],
       "lastReportedLow12mo": 12.7,
-      "lastReportedLowDate": "2026-04-26"
+      "lastReportedLowDate": "2026-06-04"
     },
     "schott-matthew-22363": {
       "name": "Matthew Schott",
@@ -252,6 +264,10 @@
         },
         {
           "d": "2026-06-01",
+          "i": 15.1
+        },
+        {
+          "d": "2026-06-04",
           "i": 15.1
         }
       ],
@@ -317,10 +333,14 @@
         {
           "d": "2026-06-01",
           "i": 8.8
+        },
+        {
+          "d": "2026-06-04",
+          "i": 8.4
         }
       ],
-      "lastReportedLow12mo": 8.5,
-      "lastReportedLowDate": "2026-02-12"
+      "lastReportedLow12mo": 8.4,
+      "lastReportedLowDate": "2026-06-04"
     },
     "elster-jared-22511": {
       "name": "Jared Elster",
@@ -377,6 +397,10 @@
         {
           "d": "2026-06-01",
           "i": 6.1
+        },
+        {
+          "d": "2026-06-04",
+          "i": 6.3
         }
       ],
       "lastReportedLow12mo": 5.5,
